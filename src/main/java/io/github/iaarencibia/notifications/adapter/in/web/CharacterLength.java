@@ -5,6 +5,7 @@ import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.ElementType.RECORD_COMPONENT;
+import static java.lang.annotation.ElementType.TYPE_USE;
 
 import jakarta.validation.Constraint;
 import jakarta.validation.ConstraintValidator;
@@ -30,7 +31,9 @@ import java.lang.annotation.Target;
  */
 @Documented
 @Constraint(validatedBy = CharacterLength.Validator.class)
-@Target({FIELD, METHOD, PARAMETER, ANNOTATION_TYPE, RECORD_COMPONENT})
+// TYPE_USE is what lets this reach the keys and the values inside a Map, which are type
+// arguments rather than members and cannot be annotated any other way.
+@Target({FIELD, METHOD, PARAMETER, ANNOTATION_TYPE, RECORD_COMPONENT, TYPE_USE})
 @Retention(RetentionPolicy.RUNTIME)
 @interface CharacterLength {
 
