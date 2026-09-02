@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.URI;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -55,6 +56,12 @@ class ApiKeyAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, DETAIL);
+        // Set here by hand because nothing else will. Spring fills the instance in on the way out
+        // of the dispatcher servlet, which a refusal in the filter chain never reaches -- so
+        // without this line the 401 would be the one response in the API missing the member that
+        // says which path it is about, and the two producers would not agree on shape after all.
+        problem.setInstance(URI.create(request.getRequestURI()));
+
         this.objectMapper.writeValue(response.getOutputStream(), problem);
     }
 }
