@@ -39,14 +39,14 @@ record SubmitNotificationRequest(
         @NotBlank(message = "must not be blank")
                 @CharacterLength(max = NotificationPayload.MAX_RECIPIENT_LENGTH)
                 String recipient,
-        @NotNull(message = "must be one of LOG, SERVICE, EMAIL") Channel channel,
+        @NotNull(message = "must be present") Channel channel,
         @NotBlank(message = "must not be blank")
                 @CharacterLength(max = NotificationPayload.MAX_SUBJECT_LENGTH)
                 String subject,
         @NotNull(message = "must be present, though it may be empty")
                 @CharacterLength(max = NotificationPayload.MAX_BODY_LENGTH)
                 String body,
-        @NotNull(message = "must be one of LOW, MEDIUM, HIGH") Priority priority,
+        @NotNull(message = "must be present") Priority priority,
         @Size(
                         max = NotificationPayload.MAX_METADATA_ENTRIES,
                         message = "must not exceed {max} entries")
