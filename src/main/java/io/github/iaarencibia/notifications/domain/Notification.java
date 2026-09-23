@@ -68,6 +68,37 @@ public final class Notification {
         this.nextAttemptAt = now;
     }
 
+    private Notification(
+            UUID id,
+            NotificationPayload payload,
+            NotificationStatus status,
+            int attempts,
+            int maxAttempts,
+            Instant nextAttemptAt,
+            String lastError,
+            Instant claimedAt,
+            String claimedBy,
+            CorrelationId correlationId,
+            String idempotencyKey,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant sentAt) {
+        this.id = id;
+        this.payload = payload;
+        this.status = status;
+        this.attempts = attempts;
+        this.maxAttempts = maxAttempts;
+        this.nextAttemptAt = nextAttemptAt;
+        this.lastError = lastError;
+        this.claimedAt = claimedAt;
+        this.claimedBy = claimedBy;
+        this.correlationId = correlationId;
+        this.idempotencyKey = idempotencyKey;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.sentAt = sentAt;
+    }
+
     /**
      * Creates a notification already queued: it starts PENDING and due immediately, so the very
      * next poll can claim it.
@@ -201,37 +232,6 @@ public final class Notification {
                 createdAt,
                 updatedAt,
                 sentAt);
-    }
-
-    private Notification(
-            UUID id,
-            NotificationPayload payload,
-            NotificationStatus status,
-            int attempts,
-            int maxAttempts,
-            Instant nextAttemptAt,
-            String lastError,
-            Instant claimedAt,
-            String claimedBy,
-            CorrelationId correlationId,
-            String idempotencyKey,
-            Instant createdAt,
-            Instant updatedAt,
-            Instant sentAt) {
-        this.id = id;
-        this.payload = payload;
-        this.status = status;
-        this.attempts = attempts;
-        this.maxAttempts = maxAttempts;
-        this.nextAttemptAt = nextAttemptAt;
-        this.lastError = lastError;
-        this.claimedAt = claimedAt;
-        this.claimedBy = claimedBy;
-        this.correlationId = correlationId;
-        this.idempotencyKey = idempotencyKey;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-        this.sentAt = sentAt;
     }
 
     /**
