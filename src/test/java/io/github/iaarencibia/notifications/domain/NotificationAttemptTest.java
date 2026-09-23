@@ -11,10 +11,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * The aggregate is the only caller today, and it pre-validates everything it passes. These
- * invariants exist for the callers that come later -- the persistence mapper rebuilding an attempt
- * from a row -- and they are asserted here because a public type whose guarantees are never
- * exercised is a guarantee nobody can rely on.
+ * The aggregate is the only caller today and pre-validates everything it passes. These invariants
+ * exist for callers that come later, such as the persistence mapper rebuilding an attempt from a
+ * row.
  */
 class NotificationAttemptTest {
 
@@ -59,8 +58,7 @@ class NotificationAttemptTest {
         @Test
         @DisplayName("allows a null response code and a null error message")
         void allowsTheNullableColumns() {
-            // A successful LOG delivery has neither: no status code to report and nothing
-            // that went wrong. Both columns are nullable in the schema for this reason.
+            // A successful LOG delivery has neither: no status code to report, nothing went wrong.
             NotificationAttempt attempt =
                     new NotificationAttempt(
                             ATTEMPT_ID,
@@ -80,9 +78,6 @@ class NotificationAttemptTest {
         @Test
         @DisplayName("requires a reason on a failed attempt, as the check constraint does")
         void failureRequiresAReason() {
-            // The same rule the ck_attempt_failure_has_reason constraint enforces on the row.
-            // Both layers exist for the same reason as the state machine: one keeps the code
-            // honest, the other keeps the data honest.
             assertThatIllegalArgumentException()
                     .isThrownBy(
                             () ->
@@ -262,8 +257,8 @@ class NotificationAttemptTest {
         @Test
         @DisplayName("is zero when an attempt finished in the same instant it started")
         void allowsZero() {
-            // The LOG channel writes to stdout: a delivery can plausibly take less time than
-            // the clock resolves, and an instantaneous attempt is not an invalid one.
+            // The LOG channel writes to stdout: a delivery can plausibly take less time than the
+            // clock resolves.
             NotificationAttempt attempt =
                     new NotificationAttempt(
                             ATTEMPT_ID,

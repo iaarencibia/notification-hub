@@ -10,13 +10,11 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 /**
- * The lifecycle graph is declared here independently of the implementation, so that a change to the
- * enum cannot quietly redefine what a legal transition is: the test would have to be edited too,
- * deliberately.
+ * The lifecycle graph is declared independently of the implementation, so a change to the enum
+ * cannot quietly redefine a legal transition: the test would have to be edited too, deliberately.
  */
 class NotificationStatusTest {
 
-    /** The expected graph, declared independently of the enum under test. */
     private static final Map<NotificationStatus, Set<NotificationStatus>> ALLOWED =
             Map.of(
                     NotificationStatus.PENDING, Set.of(NotificationStatus.DISPATCHING),

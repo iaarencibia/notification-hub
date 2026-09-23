@@ -9,11 +9,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/**
- * Every outcome the domain can express must map onto a value the {@code ck_attempt_outcome} check
- * constraint accepts, and must carry enough detail to explain itself later: a failure with no
- * recorded reason cannot answer why a notification ended up {@code FAILED}.
- */
 class DispatchOutcomeTest {
 
     @Nested
@@ -82,8 +77,6 @@ class DispatchOutcomeTest {
         @Test
         @DisplayName("treats a missing Retry-After as absent, not as zero")
         void missingRetryAfterIsNull() {
-            // Zero would mean "retry immediately", which is a different instruction from
-            // "the destination said nothing, use our own backoff".
             DispatchOutcome.RetryableFailure outcome =
                     new DispatchOutcome.RetryableFailure(503, "Service Unavailable", null);
 
@@ -127,8 +120,6 @@ class DispatchOutcomeTest {
         @Test
         @DisplayName("requires an error message")
         void requiresErrorMessage() {
-            // A notification that ends in FAILED with no recorded reason cannot answer the
-            // one question the attempt history exists to answer.
             assertThatNullPointerException()
                     .isThrownBy(() -> new DispatchOutcome.PermanentFailure(400, null));
             assertThatIllegalArgumentException()

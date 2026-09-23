@@ -13,12 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/**
- * The aggregate owns the legal transitions, the attempt budget and the record of every attempt --
- * not the schedule, which the claim query enforces. It is exercised here without a Spring context,
- * a database, or a clock that moves on its own. Time and randomness are always arguments, never
- * ambient state, which is what makes these assertions exact instead of approximate.
- */
+/** Time and randomness are always arguments here, never ambient state, so assertions are exact. */
 class NotificationTest {
 
     private static final UUID ID = UUID.fromString("3f2a1c40-0000-4000-8000-000000000001");
@@ -29,8 +24,8 @@ class NotificationTest {
     private static final int MAX_ATTEMPTS = 3;
 
     /**
-     * The random source is pinned to zero, not the jitter fraction, so the expected delays are
-     * exact. Jitter itself is covered by RetryPolicyTest.
+     * Pinned to zero, not the jitter fraction, so the expected delays are exact; jitter is covered
+     * by RetryPolicyTest.
      */
     private static final RetryPolicy POLICY =
             new RetryPolicy(Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2, () -> 0.0);
@@ -53,7 +48,6 @@ class NotificationTest {
         return Notification.submit(ID, payload(), CORRELATION_ID, "idem-key-1", maxAttempts, T0);
     }
 
-    /** Claims the notification and reports a retryable failure, the way the worker would. */
     private static NotificationAttempt failRetryably(Notification notification, Instant at) {
         notification.claim(at, INSTANCE);
         return notification.recordAttempt(
@@ -108,9 +102,9 @@ class NotificationTest {
         @Test
         @DisplayName("accepts a missing idempotency key")
         void acceptsMissingIdempotencyKey() {
-            // Only the caller knows whether two requests are the same logical send. Forcing
-            // a key would make indifferent callers generate a fresh one per call, which
-            // removes the protection while appearing to provide it.
+            // Only the caller knows whether two requests are the same send; forcing a key would
+            // make indifferent callers mint one per call, defeating the protection it appears to
+            // give.
             Notification notification =
                     Notification.submit(ID, payload(), CORRELATION_ID, null, 3, T0);
 
@@ -120,11 +114,6 @@ class NotificationTest {
         @Test
         @DisplayName("rejects a blank idempotency key, which is not the same as none")
         void rejectsBlankIdempotencyKey() {
-            // An empty string is NOT NULL, so the partial unique index stores it as a real
-            // key. Two unrelated callers that both send an empty header would collide, and
-            // the second notification would be returned as a duplicate of the first and
-            // never delivered. Accepting it silently would hand a caller retry protection
-            // it does not have.
             assertThatIllegalArgumentException()
                     .isThrownBy(
                             () -> Notification.submit(ID, payload(), CORRELATION_ID, "", 3, T0));
@@ -195,8 +184,6 @@ class NotificationTest {
         @Test
         @DisplayName("does not consume an attempt")
         void doesNotConsumeAnAttempt() {
-            // Attempts count deliveries tried, not rows claimed. A claim that the reaper
-            // later reverses must not cost the notification part of its budget.
             Notification notification = submitted();
 
             notification.claim(T0.plusSeconds(1), INSTANCE);
@@ -238,9 +225,9 @@ class NotificationTest {
         @Test
         @DisplayName("accepts an owner at the column width and rejects one over")
         void claimedByBoundary() {
-            // The owner is the instance id, which comes from configuration. Rejected here it
-            // is one clear domain error; accepted, it would fail inside every claim UPDATE
-            // with a driver error and stop dispatch altogether.
+            // The owner id comes from configuration. Rejected here it is one domain error;
+            // accepted,
+            // it fails inside every claim UPDATE with a driver error and stops dispatch altogether.
             Notification notification = submitted();
             notification.claim(T0, "x".repeat(128));
 
@@ -312,8 +299,6 @@ class NotificationTest {
         @Test
         @DisplayName("fails immediately without spending the remaining attempts")
         void failsWithoutRetrying() {
-            // This is the distinction the whole retry design exists for. A 400 will still be
-            // a 400 on the third try; retrying it burns resources and changes nothing.
             Notification notification = submitted();
             notification.claim(T0, INSTANCE);
 
@@ -382,8 +367,8 @@ class NotificationTest {
         @Test
         @DisplayName("honours a Retry-After hint instead of the calculated backoff")
         void honoursRetryAfter() {
-            // The destination told us when to come back. Ignoring it in favour of our own
-            // number is how a 429 turns into a second 429.
+            // Ignoring the destination's Retry-After in favour of our own number is how a 429
+            // turns into a second 429.
             Notification notification = submitted();
             notification.claim(T0, INSTANCE);
 
@@ -417,8 +402,7 @@ class NotificationTest {
         @DisplayName("succeeding on the last allowed attempt ends in SENT, not FAILED")
         void successOnTheLastAttemptIsStillSuccess() {
             // The exact edge where a `>` written instead of a `>=` marks a delivered
-            // notification as failed. It is the reason the flaky stub recovers on its
-            // third call rather than its second.
+            // notification as failed.
             Notification notification = submitted(3);
 
             failRetryably(notification, T0);
@@ -482,7 +466,6 @@ class NotificationTest {
         @Test
         @DisplayName("cannot record an attempt on a notification that was never claimed")
         void cannotRecordWithoutClaiming() {
-            // Recording a result for a row nobody owns means two instances dispatched it.
             Notification notification = submitted();
 
             assertThatThrownBy(
@@ -622,7 +605,6 @@ class NotificationTest {
         @Test
         @DisplayName("requires an attempt budget of at least one")
         void requiresABudget() {
-            // Mirrors ck_notification_max_attempts.
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> aRowIn(NotificationStatus.PENDING, 0, 0, null, null));
         }
@@ -630,8 +612,7 @@ class NotificationTest {
         @Test
         @DisplayName("rejects an attempt count outside the budget")
         void rejectsAttemptsOutsideTheBudget() {
-            // Mirrors ck_notification_attempts: 0 <= attempts <= max_attempts. Both ends, because
-            // a row past its budget is as impossible as one with a negative count.
+            // Both ends: a row past its budget is as impossible as one with a negative count.
             assertThatIllegalArgumentException()
                     .isThrownBy(
                             () -> aRowIn(NotificationStatus.PENDING, -1, MAX_ATTEMPTS, null, null));
@@ -649,8 +630,6 @@ class NotificationTest {
         @Test
         @DisplayName("rejects a DISPATCHING notification that does not name its owner")
         void rejectsAClaimWithoutAnOwner() {
-            // Mirrors ck_notification_claim_consistency. Either half missing leaves the reaper
-            // unable to trace the row back to the instance that abandoned it.
             assertThatIllegalArgumentException()
                     .isThrownBy(
                             () ->
@@ -674,8 +653,8 @@ class NotificationTest {
         @Test
         @DisplayName("requires the identity, payload, status, schedule, trace and timestamps")
         void requiresMandatoryArguments() {
-            // Every one of these has a NOT NULL column behind it, so a null here never comes from
-            // the data -- it comes from the mapper, which is exactly what this catches.
+            // Every one of these has a NOT NULL column behind it, so a null here comes from the
+            // mapper, not the data. That is exactly what this catches.
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->

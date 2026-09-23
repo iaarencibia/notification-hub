@@ -6,11 +6,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.DoubleSupplier;
 
 /**
- * Decides how long a notification waits before its next attempt.
- *
- * <p>The source of randomness is a constructor argument rather than a call to {@code Math.random()}
- * inside the calculation. A policy built with a fixed source produces exactly predictable delays,
- * which is what lets the backoff be asserted without sleeping.
+ * Decides how long a notification waits before its next attempt. The random source is a constructor
+ * argument, not {@code Math.random()}, so a fixed source produces deterministic delays for tests.
  */
 public final class RetryPolicy {
 
@@ -31,12 +28,8 @@ public final class RetryPolicy {
     }
 
     /**
-     * @param initialBackoff the delay after the first failure, and the base every later one grows
-     *     from
-     * @param multiplier the factor each successive delay is multiplied by
-     * @param maxBackoff the ceiling every delay is capped at, a destination's hint included
-     * @param jitter the fraction of a delay that may be added on top of it
-     * @param randomSource supplies that fraction; must yield values in {@code [0, 1)}
+     * @param maxBackoff ceiling every delay is capped at, including a destination's hint
+     * @param randomSource must yield values in {@code [0, 1)}
      */
     public RetryPolicy(
             Duration initialBackoff,
@@ -49,14 +42,13 @@ public final class RetryPolicy {
         Objects.requireNonNull(maxBackoff, "maxBackoff must not be null");
         this.randomSource = Objects.requireNonNull(randomSource, "randomSource must not be null");
 
-        // Expressed in milliseconds, not merely "positive", because that is the unit the
-        // calculation works in: anything below one would truncate to zero and leave the
-        // policy validating cleanly while producing no backoff at all.
+        // Milliseconds, not merely "positive": below one would truncate to zero, letting the
+        // policy validate cleanly while producing no backoff at all.
         if (initialBackoff.toMillis() < 1) {
             throw new IllegalArgumentException("initialBackoff must be at least 1 millisecond");
         }
-        // Below 1 the delay would shrink with every failure, hammering a destination that is
-        // already failing.
+        // Below 1 the delay would shrink with every failure, hammering an already-failing
+        // destination.
         if (multiplier < 1.0) {
             throw new IllegalArgumentException("multiplier must be at least 1.0");
         }
@@ -74,24 +66,9 @@ public final class RetryPolicy {
     }
 
     /**
-     * How long to wait before attempt {@code attemptNumber + 1}, in this precedence:
-     *
-     * <ol>
-     *   <li>{@code retryAfterHint}, when the destination supplied one; otherwise the geometric
-     *       schedule. A destination that states when it will be ready knows something this policy
-     *       cannot infer.
-     *   <li>capped at {@code maxBackoff}, whichever of the two produced the value. The hint arrives
-     *       from an address the client chose, so it is untrusted input.
-     *   <li>spread by jitter, which is a fraction of the delay and only ever adds, so the result
-     *       never precedes the instant a hint asked for. Being a fraction, it spreads nothing at
-     *       all when the delay is zero and very little when it is small: what bounds a burst of
-     *       simultaneously due notifications is the dispatcher's batch size, not this.
-     * </ol>
-     *
-     * @param attemptNumber the attempt that has just finished, counting from one
-     * @param retryAfterHint the destination's own instruction, or {@code null} if it gave none.
-     *     {@code Duration.ZERO} is not the same thing: it means retry immediately
-     * @return how long to wait before making the next attempt
+     * {@code retryAfterHint} when the destination supplied one, otherwise the geometric schedule;
+     * capped at {@code maxBackoff} since the hint is untrusted input, then spread by jitter. {@code
+     * Duration.ZERO} means retry immediately, unlike {@code null}.
      */
     public Duration delayFor(int attemptNumber, Duration retryAfterHint) {
         if (attemptNumber < 1) {

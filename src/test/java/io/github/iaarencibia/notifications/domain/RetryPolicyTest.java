@@ -11,11 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/**
- * Randomness enters through the constructor, never through a call to {@code Math.random()} inside
- * the calculation. A policy built with a fixed source produces exactly predictable delays, which is
- * what makes the backoff assertable without sleeping a test.
- */
+/** A fixed random source makes the backoff assertable without sleeping the test. */
 class RetryPolicyTest {
 
     private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(5);
@@ -69,8 +65,8 @@ class RetryPolicyTest {
         @Test
         @DisplayName("replaces the scheduled backoff when the destination supplies one")
         void replacesTheSchedule() {
-            // The destination said when to come back. Preferring our own number is how a 429
-            // turns into a second 429.
+            // Preferring our own number over the destination's is how a 429 turns into a second
+            // 429.
             assertThat(policyWithRandom(0.0).delayFor(1, Duration.ofSeconds(30)))
                     .isEqualTo(Duration.ofSeconds(30));
         }
@@ -78,9 +74,7 @@ class RetryPolicyTest {
         @Test
         @DisplayName("is capped at the configured maximum, like any other delay")
         void isCappedAtMaximum() {
-            // The hint arrives from a destination whose URL the client chose, so it is
-            // untrusted input. Without a ceiling, a single header could park a notification
-            // for a day.
+            // Without a ceiling, an untrusted header could park a notification for a day.
             assertThat(policyWithRandom(0.0).delayFor(1, Duration.ofHours(24)))
                     .isEqualTo(MAX_BACKOFF);
         }
@@ -89,9 +83,7 @@ class RetryPolicyTest {
         @DisplayName(
                 "receives jitter like any other delay, never returning before the hinted instant")
         void receivesJitter() {
-            // Jitter only ever adds, so the result never precedes the instant the destination
-            // asked for -- which is what Retry-After actually requires: not before, rather
-            // than exactly at.
+            // Jitter only adds, so the result never precedes what Retry-After asked for.
             assertThat(policyWithRandom(1.0).delayFor(1, Duration.ofSeconds(30)))
                     .isEqualTo(Duration.ofSeconds(36));
         }
@@ -105,11 +97,9 @@ class RetryPolicyTest {
         @Test
         @DisplayName("honours a hint of zero as an instruction to retry immediately")
         void zeroMeansImmediately() {
-            // Distinct from an absent hint. Note the maximum random value: jitter is a
-            // fraction of the delay, so a zero delay receives no spreading whatsoever, and
-            // every notification a destination answers this way becomes due at once. Two
-            // separate limits bound the damage -- the attempt budget, per notification, and
-            // the dispatcher's batch size, across all of them.
+            // Jitter is a fraction of the delay, so a zero delay receives no spreading at all:
+            // every notification answered this way becomes due at once. The attempt budget and
+            // the dispatcher's batch size bound the resulting spike.
             assertThat(policyWithRandom(1.0).delayFor(1, Duration.ZERO)).isEqualTo(Duration.ZERO);
         }
 
@@ -170,10 +160,9 @@ class RetryPolicyTest {
         @Test
         @DisplayName("the source production actually uses stays inside the band, and varies")
         void theProductionRandomSourceHonoursItsContract() {
-            // Every other test in this class pins the random source, so nothing here would
-            // notice if the default one returned values outside [0, 1): a delay shorter than
-            // the base, or wider than the jitter permits. This is the only test that builds
-            // the policy the way production builds it.
+            // Every other test in this class pins the random source, so none of them would notice
+            // if the default one returned values outside [0, 1). This is the only test that builds
+            // the policy the way production does.
             RetryPolicy policy = new RetryPolicy(INITIAL_BACKOFF, MULTIPLIER, MAX_BACKOFF, JITTER);
             Set<Duration> observed = new HashSet<>();
 
@@ -183,17 +172,16 @@ class RetryPolicyTest {
                 observed.add(delay);
             }
 
-            // A source stuck on a constant would satisfy the bound above while spreading
-            // nothing at all, which is the failure the bound alone cannot see.
+            // A constant source would satisfy the bound above while spreading nothing at all.
             assertThat(observed).hasSizeGreaterThan(1);
         }
 
         @Test
         @DisplayName("still applies once the delay has hit the ceiling")
         void appliesAtTheCeiling() {
-            // Without this, every retry that reached the ceiling would fire at the very same
-            // instant -- precisely when spreading them out matters most, because a ceiling is
-            // reached when a destination has been failing for a long time.
+            // Without this, every retry that reached the ceiling would fire at the same instant,
+            // precisely when spreading matters most: a ceiling is reached when a destination has
+            // been failing for a long time.
             assertThat(policyWithRandom(1.0).delayFor(10, null)).isEqualTo(Duration.ofSeconds(360));
             assertThat(policyWithRandom(0.0).delayFor(10, null)).isEqualTo(MAX_BACKOFF);
         }
@@ -222,10 +210,6 @@ class RetryPolicyTest {
         @Test
         @DisplayName("requires an initial backoff of at least one millisecond")
         void requiresAtLeastOneMillisecond() {
-            // Half a millisecond is neither negative nor zero, so a check written in those
-            // terms lets it through -- and the calculation, which works in milliseconds,
-            // then truncates it to nothing. The result is a policy that validates cleanly
-            // and produces no backoff at all.
             assertThatIllegalArgumentException()
                     .isThrownBy(
                             () ->

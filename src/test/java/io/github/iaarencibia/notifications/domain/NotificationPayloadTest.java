@@ -12,13 +12,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * The client-supplied half of a notification, grouped as the schema groups it.
- *
- * <p>Bean Validation on the inbound DTO rejects a bad request with a descriptive 400 long before
- * this type is reached. These invariants are the second line: they hold for every caller, including
- * a future scheduler or batch importer that never passes through HTTP. The maximum lengths mirror
- * the column widths, so an invalid payload fails here with a clear message instead of failing at
- * INSERT time with a driver error.
+ * These invariants are the second line of defense behind Bean Validation on the inbound DTO: they
+ * hold for every caller, including one that never passes through HTTP. The maximum lengths mirror
+ * the column widths, so a bad payload fails here instead of at INSERT time with a driver error.
  */
 class NotificationPayloadTest {
 
@@ -94,8 +90,6 @@ class NotificationPayloadTest {
         @Test
         @DisplayName("rejects a null body but accepts an empty one")
         void bodyMayBeEmptyButNotNull() {
-            // An empty body is a legitimate notification -- a subject-only ping. A null body
-            // is a caller that forgot the field, which the NOT NULL column would reject anyway.
             assertThatNullPointerException().isThrownBy(() -> withBody(null));
             assertThat(withBody("").body()).isEmpty();
         }
@@ -144,8 +138,6 @@ class NotificationPayloadTest {
         @Test
         @DisplayName("measures the body in characters too, so an emoji costs one and not two")
         void bodyCountsCharactersAndNotCodeUnits() {
-            // The same trap the subject fell into, on the field most likely to carry one: a body
-            // of 16384 emoji is 32768 UTF-16 units, and the column takes it.
             String atTheLimit = "🚀".repeat(16384);
 
             assertThat(withBody(atTheLimit).body()).isEqualTo(atTheLimit);
@@ -155,9 +147,6 @@ class NotificationPayloadTest {
         @Test
         @DisplayName("measures characters, not UTF-16 units, as the column does")
         void countsCharactersAndNotCodeUnits() {
-            // An emoji is one character for PostgreSQL and two for String.length(). Measured
-            // in code units, a subject of 512 emoji would be rejected as if it were 1024 --
-            // and the client would read an error naming a limit its subject does not exceed.
             String atTheLimit = "🚀".repeat(512);
             String overTheLimit = "🚀".repeat(513);
 
@@ -196,8 +185,6 @@ class NotificationPayloadTest {
         @Test
         @DisplayName("names the offending key, since a caller holding many needs to know which")
         void namesTheOffendingKey() {
-            // A message saying only "a metadata value is too long" leaves the caller to find it
-            // by bisecting its own map, which is work this service already did.
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> withMetadata(Map.of("orderId", "v".repeat(2049))))
                     .withMessageContaining("orderId");
@@ -206,8 +193,6 @@ class NotificationPayloadTest {
         @Test
         @DisplayName("defaults to an empty map when omitted")
         void defaultsToEmptyMap() {
-            // Matches the DEFAULT '{}'::JSONB in the schema: absent metadata is an empty
-            // object, never null, so no caller downstream has to null-check it.
             assertThat(withMetadata(null).metadata()).isEmpty();
         }
 
