@@ -8,9 +8,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The value arrives from the client, is stored in an indexed column and is emitted on every log
- * line of every dispatch attempt. Those three destinations are what the validation here protects:
- * an unbounded value inflates the index, and an unrestricted one can forge log entries.
+ * Stored in an indexed column and emitted on every log line of every dispatch attempt: an unbounded
+ * value inflates the index, an unrestricted one can forge log entries.
  */
 class CorrelationIdTest {
 
@@ -40,8 +39,6 @@ class CorrelationIdTest {
     @Test
     @DisplayName("rejects characters that could forge a log entry")
     void rejectsLogForgingCharacters() {
-        // Every dispatch attempt writes this value into a log line. A newline in it would let
-        // a caller append entries of its own invention to the log.
         assertThatIllegalArgumentException().isThrownBy(() -> new CorrelationId("order\n4471"));
         assertThatIllegalArgumentException().isThrownBy(() -> new CorrelationId("order\r4471"));
         assertThatIllegalArgumentException().isThrownBy(() -> new CorrelationId("order 4471"));

@@ -3,43 +3,24 @@ package io.github.iaarencibia.notifications.domain;
 import java.time.Duration;
 import java.util.Objects;
 
-/**
- * The result a channel reports after attempting one delivery.
- *
- * <p>Sealed rather than a boolean paired with a status code, so that a switch over the three cases
- * is checked by the compiler: a fourth outcome would not compile until every caller decided what to
- * do with it.
- */
+/** The result a channel reports after attempting one delivery. */
 public sealed interface DispatchOutcome {
 
     /**
-     * The label this outcome is recorded under.
-     *
      * @return the value stored in {@code notification_attempt.outcome}
      */
     AttemptOutcome attemptOutcome();
 
     /**
-     * The status code the destination replied with.
-     *
-     * @return the status code, or {@code null} when there is none: channels that report no status,
-     *     and failures where no response ever arrived
+     * @return the status code, or {@code null} when none arrived
      */
     Integer responseCode();
 
     /**
-     * Why the attempt failed.
-     *
      * @return the reason, or {@code null} when the attempt succeeded
      */
     String errorMessage();
 
-    /**
-     * Delivered.
-     *
-     * @param responseCode the status code the destination replied with, or {@code null} for a
-     *     channel that reports none
-     */
     record Success(Integer responseCode) implements DispatchOutcome {
 
         @Override
@@ -57,13 +38,8 @@ public sealed interface DispatchOutcome {
      * Failed for a reason that may not repeat, so the notification is rescheduled while it still
      * has attempts left.
      *
-     * @param responseCode the status code the destination replied with, or {@code null} when no
-     *     response ever arrived, as with a timeout
-     * @param errorMessage why the attempt failed; required, because a failure with no recorded
-     *     reason explains nothing later
-     * @param retryAfter the destination's own instruction on when to return, taken from the {@code
-     *     Retry-After} header. Null means it gave none, which is a different statement from {@code
-     *     Duration.ZERO}: that would mean retry immediately
+     * @param retryAfter from the {@code Retry-After} header; {@code null} means none was given,
+     *     distinct from {@code Duration.ZERO} which means retry immediately
      */
     record RetryableFailure(Integer responseCode, String errorMessage, Duration retryAfter)
             implements DispatchOutcome {
@@ -81,14 +57,7 @@ public sealed interface DispatchOutcome {
         }
     }
 
-    /**
-     * Rejected for a reason that retrying would not change.
-     *
-     * @param responseCode the status code the destination replied with, or {@code null} for a
-     *     channel that reports none
-     * @param errorMessage why the attempt was rejected; required, because a failure with no
-     *     recorded reason explains nothing later
-     */
+    /** Rejected for a reason that retrying would not change. */
     record PermanentFailure(Integer responseCode, String errorMessage) implements DispatchOutcome {
 
         public PermanentFailure {
