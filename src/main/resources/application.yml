@@ -44,7 +44,8 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
   error:
-    # Error responses are produced by the exception handler as RFC 7807 problem details.
+    # Neither reaches the caller: exception messages and stack traces are for the log, not
+    # for a client of this API.
     include-message: never
     include-stacktrace: never
   shutdown: graceful
@@ -97,20 +98,18 @@ notifications:
   instance-id: ${INSTANCE_ID:${HOSTNAME:local}}
 
   security:
-    # Overridden in docker-compose. The default exists so the app starts on a clean
-    # checkout; it is documented in the README as a development-only credential.
+    # Overridden in docker-compose. The default exists only so the app starts on a clean
+    # checkout, not as a credential meant for any real deployment.
     api-key: ${NOTIFICATIONS_API_KEY:local-dev-api-key-change-me}
 
   dispatch:
     # Whether the timer that drives the worker is registered at all. Not bound to the typed
-    # properties on purpose: nothing in the application reads it, it decides whether a bean
-    # exists. Turned off by the integration tests, which drive the use case directly so that
-    # what they assert does not depend on when a poll happened to fire.
+    # properties: nothing reads it, it only decides whether the bean exists. The integration
+    # tests turn it off and drive the use case directly, independent of poll timing.
     scheduled: ${DISPATCH_SCHEDULED:true}
     # How often the worker looks for claimable rows. This interval is the floor on
     # dispatch latency; it is the price paid for not running a broker.
     poll-interval: ${DISPATCH_POLL_INTERVAL:1s}
-    # Rows claimed per poll, per instance.
     batch-size: ${DISPATCH_BATCH_SIZE:25}
     # Concurrency inside a single instance. Bounded on purpose: an unbounded pool would
     # turn a slow downstream service into unbounded memory growth.

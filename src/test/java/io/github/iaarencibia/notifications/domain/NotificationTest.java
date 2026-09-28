@@ -226,8 +226,8 @@ class NotificationTest {
         @DisplayName("accepts an owner at the column width and rejects one over")
         void claimedByBoundary() {
             // The owner id comes from configuration. Rejected here it is one domain error;
-            // accepted,
-            // it fails inside every claim UPDATE with a driver error and stops dispatch altogether.
+            // accepted, it fails inside every claim UPDATE with a driver error and stops
+            // dispatch altogether.
             Notification notification = submitted();
             notification.claim(T0, "x".repeat(128));
 

@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 COPY src ./src
 # Tests are excluded from the image build: they need Testcontainers, which needs a
-# Docker daemon. They run in CI and locally via `mvn verify`, not during packaging.
+# Docker daemon. They run via `mvn verify` (the `test` compose profile), not during packaging.
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -ntp -DskipTests package
 
