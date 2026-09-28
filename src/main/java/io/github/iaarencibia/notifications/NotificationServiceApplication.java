@@ -9,10 +9,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * Entry point of the notification hub.
  *
- * <p>Scheduling is enabled here, at the outermost edge of the application, because the dispatch
- * worker is an inbound adapter that drives the application: it is a delivery mechanism, not a piece
- * of business logic. Keeping the annotation out of the use cases is what allows the scheduler to be
- * replaced (for example by a container-managed timer) without touching the core.
+ * <p>Scheduling is enabled at this outermost edge because the dispatch worker is a delivery
+ * mechanism, not business logic; keeping the annotation out of the use cases lets the scheduler be
+ * replaced without touching the core.
  */
 // The in-memory user Boot generates when no UserDetailsService exists is excluded: nothing in
 // the chain can authenticate against it, and leaving it in prints a credential on every start.

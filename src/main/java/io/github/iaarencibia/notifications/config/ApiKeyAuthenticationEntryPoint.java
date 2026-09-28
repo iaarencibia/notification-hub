@@ -13,18 +13,12 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 
 /**
- * Writes the response for a request the chain refused to let through.
+ * Writes the response for a request the filter chain refused, before it ever reached the dispatcher
+ * servlet and any {@code @ControllerAdvice} the web adapter registers. Left to itself, the chain
+ * falls back to a bodiless {@code 403} with no challenge.
  *
- * <p>It exists because that refusal happens inside the filter chain, before the request reaches the
- * dispatcher servlet, and so out of reach of any {@code @ControllerAdvice} the web adapter
- * registers later. Left to itself, a chain that configures neither form login nor HTTP basic falls
- * back to {@code Http403ForbiddenEntryPoint}: the caller would get a bodiless {@code 403}, with no
- * challenge and the wrong status, as the first thing a new integration ever sees.
- *
- * <p>The wording is the same whether the credential was absent or simply wrong. The two are
- * distinguishable here, and are deliberately not distinguished: telling them apart would confirm to
- * a caller that its header and scheme were right and only the key was not, which narrows the search
- * for someone guessing.
+ * <p>The wording is the same whether the credential was absent or simply wrong, so a caller
+ * guessing keys cannot learn from the response which half it got right.
  */
 class ApiKeyAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
@@ -49,17 +43,14 @@ class ApiKeyAuthenticationEntryPoint implements AuthenticationEntryPoint {
             AuthenticationException authenticationException)
             throws IOException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
-        // RFC 9110 requires a 401 to carry a challenge. Naming the scheme is also the only way a
-        // caller learns what to send, since the credential does not travel in a header it could
-        // have guessed.
+        // RFC 9110 requires a 401 to carry a challenge; naming the scheme is also the only way a
+        // caller learns what to send.
         response.setHeader(HttpHeaders.WWW_AUTHENTICATE, CHALLENGE);
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, DETAIL);
-        // Set here by hand because nothing else will. Spring fills the instance in on the way out
-        // of the dispatcher servlet, which a refusal in the filter chain never reaches -- so
-        // without this line the 401 would be the one response in the API missing the member that
-        // says which path it is about, and the two producers would not agree on shape after all.
+        // Set by hand: Spring normally fills `instance` in on the way out of the dispatcher
+        // servlet, which a refusal in the filter chain never reaches.
         problem.setInstance(URI.create(request.getRequestURI()));
 
         this.objectMapper.writeValue(response.getOutputStream(), problem);

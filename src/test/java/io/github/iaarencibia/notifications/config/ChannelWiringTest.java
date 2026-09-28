@@ -40,8 +40,6 @@ class ChannelWiringTest {
     @Test
     @DisplayName("a channel becomes deliverable by adding its adapter, and nothing else")
     void anAddedAdapterIsEnough() {
-        // The whole promise of deriving the set: no validation and no error message has to be
-        // found and updated for EMAIL to start being accepted.
         DeliverableChannels deliverable =
                 deliverableFrom(Channel.LOG, Channel.SERVICE, Channel.EMAIL);
 
@@ -52,9 +50,8 @@ class ChannelWiringTest {
     @Test
     @DisplayName("keys each adapter by the channel it answers for")
     void keysEachAdapterByItsChannel() {
-        // The registry the dispatcher reads to decide who delivers. Asserted on identity, not on
-        // size: keying every adapter under one channel would leave a map of the right shape and
-        // send everything through the wrong sender.
+        // Asserted on identity, not size: keying every adapter under one channel would leave a
+        // map of the right shape and send everything through the wrong sender.
         NotificationChannelSender log = senderFor(Channel.LOG);
         NotificationChannelSender service = senderFor(Channel.SERVICE);
 
@@ -68,8 +65,8 @@ class ChannelWiringTest {
     @Test
     @DisplayName("refuses to start when two adapters claim the same channel")
     void refusesTwoAdaptersForOneChannel() {
-        // Without this, which of the two delivers would be settled by the order Spring returns
-        // the beans in -- a behaviour nobody chose and no test could pin.
+        // Otherwise which of the two delivers would be settled by the order Spring returns the
+        // beans in -- a behaviour nobody chose.
         assertThatIllegalStateException()
                 .isThrownBy(
                         () ->
@@ -80,10 +77,6 @@ class ChannelWiringTest {
                 .withMessageContaining("SERVICE");
     }
 
-    /**
-     * @param channels the channels adapters are present for
-     * @return what the wiring makes deliverable, through the registry the application reads
-     */
     private DeliverableChannels deliverableFrom(Channel... channels) {
         List<NotificationChannelSender> senders =
                 Arrays.stream(channels).map(ChannelWiringTest::senderFor).toList();

@@ -83,9 +83,8 @@ class ApiKeySecurityIT extends IntegrationTestSupport {
     void rejectsWrongScheme() throws Exception {
         mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + API_KEY))
                 .andExpect(status().isUnauthorized());
-        // A near miss as well as the obvious one. Which parser slip would let either of them
-        // through is pinned in ApiKeyAuthenticationFilterTest, where the parser's answer is
-        // readable; what this asserts is only that the chain turns both away end to end.
+        // A near miss as well as the obvious one; which parser slip would let either through is
+        // pinned in ApiKeyAuthenticationFilterTest, where the parser's answer is readable.
         mockMvc.perform(
                         get(PROTECTED_PATH)
                                 .header(HttpHeaders.AUTHORIZATION, "ApiKeyV2 " + API_KEY))
@@ -142,10 +141,9 @@ class ApiKeySecurityIT extends IntegrationTestSupport {
                 .as("an accepted request must not open a session")
                 .isNull();
 
-        // The rejection is the path that matters. Before handing over to the entry point, the
-        // chain saves the original request so it could be replayed after a login, and the
+        // The chain saves the original request before handing off to the entry point, and the
         // default place to save it is a session -- which an unauthenticated caller could then
-        // allocate on every attempt, without holding a credential at all.
+        // allocate on every attempt.
         MvcResult rejected =
                 mockMvc.perform(get(PROTECTED_PATH))
                         .andExpect(status().isUnauthorized())

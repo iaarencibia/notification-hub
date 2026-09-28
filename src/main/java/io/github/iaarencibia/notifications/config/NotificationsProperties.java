@@ -82,10 +82,9 @@ public record NotificationsProperties(
     }
 
     /**
-     * The budget is bounded here; the schedule is not, and that is deliberate. {@link RetryPolicy}
-     * validates its own four values and is built while the context starts, so an impossible backoff
-     * already refuses startup -- at the same moment, with the rule owned by the class that applies
-     * it. Repeating it here is what was removed from {@code RetryPolicy} in the first place.
+     * The budget is bounded here; the schedule is not. {@link RetryPolicy} validates its own four
+     * values while the context starts, so an impossible backoff already refuses startup, with the
+     * rule owned by the class that applies it.
      *
      * @param maxAttempts how many deliveries a notification is given. Stamped on each row as it is
      *     created, so a later change of configuration leaves notifications already in flight with
@@ -131,12 +130,7 @@ public record NotificationsProperties(
         }
     }
 
-    /**
-     * Shared by every block that configures a duration, so the rule is written once.
-     *
-     * @param value the configured duration, possibly absent
-     * @param name the property to name if it is unusable
-     */
+    /** Shared by every block that configures a duration, so the rule is written once. */
     private static void requirePositive(Duration value, String name) {
         // A null is left alone on purpose: @NotNull owns the absent case and reports it by the
         // property name, which is the message an operator can act on.

@@ -25,8 +25,8 @@ class RetryPolicyWiringTest {
     @Test
     @DisplayName("gives each configured value to the argument it belongs to")
     void wiresEachValueToItsOwnArgument() {
-        // Every value distinct, and none a multiple of another, so a crossed pair changes the
-        // result instead of cancelling out. Jitter is off here so the three delays are exact.
+        // Every value distinct, none a multiple of another, so a crossed pair changes the result
+        // instead of cancelling out. Jitter is off so the three delays are exact.
         RetryPolicy policy =
                 config.retryPolicy(
                         propertiesWith(Duration.ofSeconds(4), 5.0, Duration.ofMinutes(7), 0.0));
@@ -45,10 +45,9 @@ class RetryPolicyWiringTest {
     @Test
     @DisplayName("passes the configured jitter through, rather than a constant of its own")
     void wiresTheJitter() {
-        // The only property of jitter observable through the bean, which builds the policy with
-        // ThreadLocalRandom: with it wired, two delays for the same attempt differ. A hardcoded
-        // zero would make every one of them identical, and the three assertions above would not
-        // notice, because they run with jitter off.
+        // With jitter wired, two delays for the same attempt differ; a hardcoded zero would make
+        // every one identical, and the assertions above would not notice since they run with
+        // jitter off.
         RetryPolicy policy =
                 config.retryPolicy(
                         propertiesWith(Duration.ofSeconds(4), 2.0, Duration.ofMinutes(7), 1.0));
@@ -64,9 +63,8 @@ class RetryPolicyWiringTest {
     @Test
     @DisplayName("refuses to start on a schedule whose delays would shrink")
     void refusesAScheduleThatShrinks() {
-        // The reason the schedule carries no bean validation of its own: the policy owns that
-        // rule, and building it here is what makes the refusal happen at startup rather than at
-        // the first failed delivery.
+        // The policy owns this rule, not bean validation; building it here is what makes the
+        // refusal happen at startup rather than at the first failed delivery.
         assertThatIllegalArgumentException()
                 .isThrownBy(
                         () ->
@@ -79,13 +77,6 @@ class RetryPolicyWiringTest {
                 .withMessageContaining("multiplier");
     }
 
-    /**
-     * @param initialBackoff the delay after the first failure
-     * @param multiplier the factor each successive delay grows by
-     * @param maxBackoff the ceiling every delay is capped at
-     * @param jitter the fraction that may be added on top
-     * @return a complete configuration whose retry block holds exactly those
-     */
     private static NotificationsProperties propertiesWith(
             Duration initialBackoff, double multiplier, Duration maxBackoff, double jitter) {
         return new NotificationsProperties(

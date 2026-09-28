@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Both bean methods hand over several values of the same type -- three {@code int}s to the
  * dispatcher, three {@code Duration}s within reach of the reaper -- so passing the wrong one
- * compiles and changes nothing visible until the service is running. The reaper's is the expensive
- * one: given the poll interval instead of its threshold, it would release claims after a second and
- * deliver every slow notification twice.
+ * compiles and changes nothing visible until the service is running. Crossing the reaper's is the
+ * expensive mistake: given the poll interval instead of its threshold, it would release claims
+ * after a second and deliver every slow notification twice.
  */
 class DispatchWiringTest {
 
@@ -50,8 +50,6 @@ class DispatchWiringTest {
     @Test
     @DisplayName("gives the dispatcher its batch size and this instance's identity")
     void wiresTheBatchSizeAndInstanceId() {
-        // The pool size and the queue capacity are ints in the same object, and either of them in
-        // place of the batch size would claim a plausible number of rows on every poll.
         config.dispatchDueNotificationsUseCase(
                         queue,
                         Map.of(),
@@ -67,10 +65,7 @@ class DispatchWiringTest {
                 .isEqualTo(INSTANCE_ID);
     }
 
-    /**
-     * @return a configuration whose every number differs from every other, so a crossed pair
-     *     changes the result rather than cancelling out
-     */
+    /** Every number differs from every other, so a crossed pair changes the result. */
     private static NotificationsProperties properties() {
         return new NotificationsProperties(
                 INSTANCE_ID,

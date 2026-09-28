@@ -38,18 +38,16 @@ class SecurityConfig {
                         requests ->
                                 requests
                                         // Matched through the endpoint, not a literal path, so
-                                        // moving the actuator
-                                        // base path cannot silently close the probe the healthcheck
-                                        // polls.
+                                        // moving the actuator base path cannot silently close the
+                                        // probe the healthcheck polls.
                                         .requestMatchers(EndpointRequest.to(HealthEndpoint.class))
                                         .permitAll()
                                         // Deny by default, the container's own /error dispatch
-                                        // included. What that
-                                        // costs is declared in the README's trade-offs.
+                                        // included; what that costs is in the README's trade-offs.
                                         .anyRequest()
                                         .authenticated())
-                // It need only precede the authorization filter; one step earlier than that means
-                // a recognised caller never has an anonymous token written for it at all.
+                // Placed before AnonymousAuthenticationFilter, not just before the authorization
+                // filter, so a recognised caller never has an anonymous token written over it.
                 .addFilterBefore(
                         new ApiKeyAuthenticationFilter(
                                 properties.security().apiKey(), contextRepository),
