@@ -32,19 +32,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * A notification from the moment it is accepted to the moment it is delivered, or given up on.
+ * A notification from the moment it is accepted to the moment it is delivered, or given up on: the
+ * intake writes a row, the claim query finds it, the SERVICE channel posts to a destination that is
+ * really there, the outcome is classified, and the notification is rescheduled or finished.
  *
- * <p>This is the requirement the whole design exists for, and the only test that exercises all of
- * it at once: the intake writes a row, the claim query finds it, the SERVICE channel posts to a
- * destination that is really there, the outcome is classified, and the notification is either
- * rescheduled or finished.
- *
- * <p>It drives the use case rather than waiting for the timer. What a scheduler adds is that the
- * pass runs again in a second; asserting on that would mean sleeping for one, and would make every
- * failure here ambiguous between "the dispatch is wrong" and "the tick had not fired yet".
- *
- * <p>The backoff is compressed to a millisecond so that a retry is due by the time the next pass
- * runs. The schedule itself is asserted where it is decided, in the retry policy's own tests.
+ * <p>Drives the use case rather than waiting for the timer, so a failure here is never ambiguous
+ * between "the dispatch is wrong" and "the tick had not fired yet." The backoff is compressed to a
+ * millisecond so a retry is due by the time the next pass runs; the schedule itself is asserted in
+ * the retry policy's own tests.
  */
 @SpringBootTest(
         properties = {
@@ -130,9 +125,8 @@ class NotificationDeliveryIT extends IntegrationTestSupport {
     @Test
     @DisplayName("gives up on a destination that refuses, without spending the budget")
     void failsAtOnceOnARefusal() {
-        // A 400 says the request itself is wrong, and sending it again would not make it right.
-        // Retrying here would be three calls that cannot succeed and a notification that takes
-        // minutes to reach the state it was already in on the first attempt.
+        // A 400 says the request itself is wrong: retrying would be three calls that cannot
+        // succeed, taking minutes to reach the state it was already in on the first attempt.
         DESTINATION.stubFor(
                 post(urlEqualTo("/hook/broken")).willReturn(aResponse().withStatus(400)));
         UUID id = submitTo("/hook/broken");
@@ -164,12 +158,9 @@ class NotificationDeliveryIT extends IntegrationTestSupport {
     }
 
     /**
-     * Runs passes until nothing is claimable any more.
-     *
-     * <p>A pass returns as soon as the batch is handed to the workers, so a bounded wait between
-     * passes is unavoidable: what is being waited for is a delivery over a socket. The loop ends on
-     * the state of the table rather than on a fixed number of passes, so a schedule that stops
-     * making progress fails here rather than passing by coincidence.
+     * Runs passes until nothing is claimable any more. Ends on the state of the table rather than a
+     * fixed number of passes, so a schedule that stops making progress fails here rather than
+     * passing by coincidence.
      */
     private void dispatchUntilSettled() {
         Instant deadline = Instant.now().plus(Duration.ofSeconds(30));
@@ -183,9 +174,6 @@ class NotificationDeliveryIT extends IntegrationTestSupport {
         throw new AssertionError("no notification reached a terminal state within thirty seconds");
     }
 
-    /**
-     * @return whether every notification has finished, one way or the other
-     */
     private boolean settled() {
         Integer unfinished =
                 jdbc.queryForObject(
@@ -203,10 +191,6 @@ class NotificationDeliveryIT extends IntegrationTestSupport {
         }
     }
 
-    /**
-     * @param path where on the destination the notification should be posted
-     * @return the identity of the notification the intake accepted
-     */
     private UUID submitTo(String path) {
         NotificationPayload payload =
                 new NotificationPayload(
@@ -232,9 +216,7 @@ class NotificationDeliveryIT extends IntegrationTestSupport {
                 "SELECT attempts FROM notification WHERE id = ?", Integer.class, id);
     }
 
-    /**
-     * @return every attempt's outcome, in the order they were made
-     */
+    /** Every attempt's outcome, in the order they were made. */
     private List<String> outcomesOf(UUID id) {
         return jdbc.queryForList(
                 "SELECT outcome FROM notification_attempt "

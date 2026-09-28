@@ -16,24 +16,20 @@ import org.springframework.web.client.RestClient;
 /**
  * Delivers a notification by posting it to the URL the client named as the recipient.
  *
- * <p>This is the channel that gives the retry requirement something to be about. The log channel
- * cannot fail; a remote service can fail in two ways that must not be treated alike, and telling
- * them apart is the whole job here:
+ * <p>Classifies the response, which is the whole job here:
  *
  * <ul>
  *   <li><strong>2xx</strong> -- delivered.
  *   <li><strong>5xx, a timeout, a refused connection</strong> -- the destination is unwell, not the
- *       request. Retrying is what fixes it.
- *   <li><strong>4xx</strong> -- the destination understood and refused. Retrying an identical
- *       request would produce an identical refusal, so it is spent.
- *   <li><strong>429</strong> -- a 4xx by number and a transient failure in meaning: the destination
- *       is asking for less traffic, not rejecting the message. It carries the one hint a
- *       destination can give about when to return, and that hint is honoured.
+ *       request; retrying is what fixes it.
+ *   <li><strong>4xx</strong> -- the destination understood and refused; an identical retry would
+ *       produce an identical refusal.
+ *   <li><strong>429</strong> -- a 4xx by number and transient in meaning: the destination is asking
+ *       for less traffic, and its {@code Retry-After} hint is honoured.
  * </ul>
  *
- * <p>Nothing here retries or sleeps. One call, one outcome; how many attempts a notification gets
- * and how far apart belongs to the dispatcher and the retry policy, and a channel that also retried
- * would silently multiply both.
+ * <p>Nothing here retries or sleeps: how many attempts a notification gets belongs to the
+ * dispatcher and the retry policy.
  */
 class HttpServiceChannelSender implements NotificationChannelSender {
 
@@ -64,10 +60,9 @@ class HttpServiceChannelSender implements NotificationChannelSender {
                     null, "recipient is not a valid URI: " + malformed.getReason());
         }
 
-        // Parsing is not enough: "example.com/hook" is a legal relative URI, and so are plenty of
-        // shapes no HTTP call can be built from. Each is permanent -- the recipient is stored on
-        // the row and no retry rewrites it. Whether the host answers is a different question, and
-        // the attempt below is what classifies that.
+        // Parsing is not enough: "example.com/hook" is a legal relative URI, and other shapes
+        // parse with no HTTP call buildable from them. Each is permanent: the recipient is
+        // stored on the row and no retry rewrites it.
         String unusable = whyUnusable(destination);
         if (unusable != null) {
             return new DispatchOutcome.PermanentFailure(null, unusable);
@@ -87,15 +82,13 @@ class HttpServiceChannelSender implements NotificationChannelSender {
                                             response.getStatusCode(),
                                             response.getHeaders().getFirst("Retry-After")));
         } catch (ResourceAccessException unreachable) {
-            // Everything below the response: connect timeout, read timeout, refused connection,
-            // a name that does not resolve. No answer arrived, so there is no status to record,
-            // and every one of them is worth trying again.
+            // Connect timeout, read timeout, refused connection, unresolved name: no answer
+            // arrived, so there is no status to record, and each is worth trying again.
             return new DispatchOutcome.RetryableFailure(null, describe(unreachable), null);
         } catch (RuntimeException refused) {
-            // The backstop, and the reason it exists rather than a longer list of checks above:
-            // this port promises never to throw, and the checks can only cover the shapes already
-            // thought of. Twice now a recipient got past them and blew up here. Permanent, because
-            // a request that cannot be built from an unchanging recipient will never be built.
+            // The backstop: this port promises never to throw, and the checks above can only
+            // cover shapes already thought of -- twice now a recipient got past them and blew
+            // up here. Permanent, since an unchanging recipient will never build a request.
             return new DispatchOutcome.PermanentFailure(
                     null,
                     "recipient cannot be reached as an HTTP destination -- " + describe(refused));
@@ -125,9 +118,8 @@ class HttpServiceChannelSender implements NotificationChannelSender {
     }
 
     /**
-     * The wire format of the outbound call. Only the payload the client submitted travels: the
-     * lifecycle of the notification is this service's business, and a destination that received an
-     * attempt count would be reading state it has no say over.
+     * The wire format of the outbound call: only the payload the client submitted travels. The
+     * lifecycle is this service's own business.
      */
     private static Map<String, Object> bodyOf(Notification notification) {
         return Map.of(
@@ -153,25 +145,21 @@ class HttpServiceChannelSender implements NotificationChannelSender {
                     status.value(),
                     "the destination rejected the notification with " + status.value());
         }
-        // 5xx, and any status that is neither success nor a client error. A destination
-        // answering something this service does not recognise is treated as unwell rather than
-        // as having refused: the expensive mistake is discarding a notification that would have
-        // been delivered on the next attempt.
+        // 5xx, and anything else unrecognised: treated as unwell rather than refused, since the
+        // expensive mistake is discarding a notification that would have been delivered on the
+        // next attempt.
         return new DispatchOutcome.RetryableFailure(
                 status.value(), "the destination answered " + status.value(), null);
     }
 
     /**
-     * Reads {@code Retry-After} in its delay-seconds form only. The HTTP-date form is legal and
-     * deliberately ignored: honouring it means trusting the destination's clock against ours, and a
-     * skew there turns into a notification that sleeps for hours. Absent or unreadable gives null,
-     * which means "no instruction" -- and the retry policy falls back to its own backoff, which is
-     * never worse than what it would have done anyway.
+     * Reads {@code Retry-After} in its delay-seconds form only; the HTTP-date form is deliberately
+     * ignored, since honouring it means trusting the destination's clock against ours. Absent or
+     * unreadable gives null, meaning "no instruction," and the retry policy falls back to its own
+     * backoff.
      *
-     * <p>Zero passes through, and it reads like an oversight, so: it is deliberate. Nothing is
-     * retried immediately because the dispatcher polls, and what bounds a destination's load is the
-     * attempt budget rather than the delay. This channel reports the instruction and does not judge
-     * it; capping and flooring belong to the retry policy.
+     * <p>Zero passes through deliberately: this channel reports the instruction and does not judge
+     * it. Capping and flooring belong to the retry policy.
      */
     private static Duration retryAfterOf(String header) {
         if (header == null || header.isBlank()) {
@@ -194,9 +182,8 @@ class HttpServiceChannelSender implements NotificationChannelSender {
     }
 
     /**
-     * The class name is kept alongside the message because the message of a timeout is often the
-     * URL and nothing else, and a recorded failure that does not say what went wrong cannot answer
-     * the question the attempt history exists for.
+     * The class name travels alongside the message: a timeout's message is often just the URL, and
+     * a recorded failure that does not say what went wrong answers nothing.
      */
     private static String describe(Exception failure) {
         Throwable cause = failure.getCause() == null ? failure : failure.getCause();

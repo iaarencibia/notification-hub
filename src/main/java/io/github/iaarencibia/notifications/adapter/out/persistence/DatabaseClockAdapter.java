@@ -5,11 +5,8 @@ import java.time.Instant;
 import org.springframework.stereotype.Component;
 
 /**
- * The clock, read from PostgreSQL.
- *
- * <p>It is here, beside the statements, because that is where the clock is: the whole point of the
- * port is that the time comes from the database every instance shares rather than from the machine
- * each one happens to be running on.
+ * The clock, read from PostgreSQL: the whole point of the port is that time comes from the database
+ * every instance shares, not from the machine each one happens to run on.
  */
 @Component
 class DatabaseClockAdapter implements SystemClock {

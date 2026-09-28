@@ -6,11 +6,9 @@ import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
 
 /**
- * Translates between the aggregate and the row.
- *
- * <p>It is the whole reason the domain never imports JPA, and it is deliberately dull: both
- * directions are transcriptions, written in the column order of the table so that a crossed pair of
- * same-typed fields is visible by reading the two lists side by side.
+ * Translates between the aggregate and the row. The whole reason the domain never imports JPA, and
+ * deliberately dull: both directions are transcriptions, written in the column order of the table
+ * so a crossed pair of same-typed fields is visible by reading the two lists side by side.
  */
 final class NotificationMapper {
 
@@ -44,9 +42,6 @@ final class NotificationMapper {
      * Writes an aggregate's lifecycle back onto the row it came from. Only the fields a dispatch
      * moves: identity and payload are fixed at intake, and rewriting them from here would be a
      * second chance to get them wrong.
-     *
-     * @param entity the row, as it was read
-     * @param notification the aggregate, as the dispatch left it
      */
     static void applyLifecycle(NotificationEntity entity, Notification notification) {
         entity.applyLifecycle(
@@ -60,10 +55,7 @@ final class NotificationMapper {
                 notification.sentAt());
     }
 
-    /**
-     * @param attempt the attempt the aggregate produced
-     * @return the row to insert for it, its duration derived once by the domain
-     */
+    /** The row to insert for {@code attempt}, its duration derived once by the domain. */
     static NotificationAttemptEntity toEntity(NotificationAttempt attempt) {
         return new NotificationAttemptEntity(
                 attempt.id(),

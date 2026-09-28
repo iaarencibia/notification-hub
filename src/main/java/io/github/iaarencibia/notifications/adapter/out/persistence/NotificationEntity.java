@@ -81,9 +81,9 @@ class NotificationEntity {
     private Instant sentAt;
 
     /**
-     * The optimistic lock, managed by the provider. It is left out of the constructor because a row
-     * being inserted has no version to state; a claimed notification coming back to be written sets
-     * it to the value it was claimed at, which is what the guard compares against.
+     * The optimistic lock, managed by the provider and left out of the constructor: a row being
+     * inserted has no version to state, and a claim sets it explicitly to the value it was claimed
+     * at.
      */
     @Version private long version;
 
@@ -133,19 +133,10 @@ class NotificationEntity {
     }
 
     /**
-     * Writes back every field a dispatch may move, in the column order of the table so that the
-     * call reads as a transcription. One method rather than a setter each: a lifecycle written half
-     * way is a row the claim consistency constraint would reject anyway, and there is no caller
-     * that legitimately wants to move one of these without the others.
-     *
-     * @param status the lifecycle state reached
-     * @param attempts deliveries recorded so far
-     * @param nextAttemptAt when the claim query may take it again
-     * @param lastError why the most recent attempt failed, or {@code null}
-     * @param claimedAt when the current owner took it, or {@code null} once released
-     * @param claimedBy the instance that owns it, or {@code null} once released
-     * @param updatedAt when this write happened
-     * @param sentAt when delivery succeeded, or {@code null}
+     * Writes back every field a dispatch may move, in the column order of the table, as one method
+     * rather than a setter each: a lifecycle written halfway is a row the claim consistency
+     * constraint would reject anyway, and no caller legitimately wants to move one of these fields
+     * without the others.
      */
     void applyLifecycle(
             NotificationStatus status,

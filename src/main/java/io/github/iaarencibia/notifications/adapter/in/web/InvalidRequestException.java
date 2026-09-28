@@ -6,16 +6,11 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
- * The headers a caller sent that the service will not accept.
+ * The headers a caller sent that the service will not accept, carried out with the name of each
+ * header attached so the response can say which ones and why.
  *
- * <p>Bean Validation covers the body, but the two headers this endpoint reads are not fields of any
- * object it validates, and one of them is turned into a domain type whose own constructor does the
- * checking. This carries those refusals out with the name of each header attached, so the response
- * can say which ones and why instead of reporting a generic bad request.
- *
- * <p>It holds every offending header rather than only the first. A caller fixing its integration
- * should learn about all of them in one round trip, which is the promise the body path already
- * keeps -- and holding the two paths to different standards is worse than either standard.
+ * <p>Holds every offending header, not only the first: the body path already reports every field in
+ * one round trip, and holding the two paths to different standards would be worse than either.
  */
 class InvalidRequestException extends RuntimeException {
 
@@ -26,21 +21,18 @@ class InvalidRequestException extends RuntimeException {
      *     exactly as it travels on the wire, and phrased for whoever has to fix the caller
      */
     InvalidRequestException(Map<String, String> reasonsByHeader) {
-        // The reasons are stored unprefixed, because in the response the header name is already
-        // the key they sit under and repeating it there would read as a stutter. Only this
-        // message, which nothing but a log ever sees, joins the name back onto the reason.
+        // Stored unprefixed: the response already keys each reason under the header name, so
+        // repeating it there would stutter. Only this message, seen only by a log, joins name
+        // to reason.
         super(
                 reasonsByHeader.entrySet().stream()
                         .map(refusal -> refusal.getKey() + " " + refusal.getValue())
                         .collect(Collectors.joining("; ")));
-        // Sorted, so that two bad headers produce the same response whichever order they were
+        // Sorted, so two bad headers produce the same response whichever order they were
         // checked in.
         this.reasonsByHeader = Collections.unmodifiableMap(new TreeMap<>(reasonsByHeader));
     }
 
-    /**
-     * @return the reason each refused header was refused, keyed by header name
-     */
     Map<String, String> reasonsByHeader() {
         return reasonsByHeader;
     }

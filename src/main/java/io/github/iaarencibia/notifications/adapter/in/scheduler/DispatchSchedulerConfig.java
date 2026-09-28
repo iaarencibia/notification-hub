@@ -15,15 +15,13 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 /**
  * The inbound adapter that drives the dispatcher: a timer, and nothing else.
  *
- * <p>The intervals are registered from the bound configuration rather than declared on
- * {@code @Scheduled} annotations, so that the values the scheduler runs on are the same validated
- * ones the rest of the application reads. An annotation would resolve the placeholder itself and
- * quietly become a second source for the same number.
+ * <p>Intervals come from the bound configuration rather than {@code @Scheduled} annotations, so the
+ * scheduler runs on the same validated values the rest of the application reads instead of
+ * resolving the placeholder a second time.
  *
- * <p>Fixed delay and not fixed rate: the next pass starts after the previous one returns, so a pass
- * that runs long delays the next instead of overlapping it. The two passes are given a thread each
- * ({@code spring.task.scheduling.pool.size}) so that a dispatch pass running long -- which it does
- * exactly when the workers are saturated -- cannot also hold up the reaper.
+ * <p>Fixed delay, not fixed rate: the next pass starts after the previous one returns, so a slow
+ * pass delays the next instead of overlapping it. Each pass gets its own thread ({@code
+ * spring.task.scheduling.pool.size}), so a saturated dispatch pass cannot also stall the reaper.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -68,16 +66,8 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
         }
     }
 
-    /**
-     * Keeps the timer alive across a failed pass.
-     *
-     * <p>A database that is briefly unreachable must not end the schedule for the life of the
-     * process: the pass that failed is lost, the next one is not.
-     *
-     * @param pass what this pass is called, for the log line
-     * @param work the pass to run
-     * @return what the pass reported, or zero if it failed
-     */
+    // Keeps the timer alive across a failed pass: a briefly unreachable database must not end
+    // the schedule for the life of the process, so this pass is lost and the next one is not.
     private int run(String pass, IntSupplier work) {
         try {
             return work.getAsInt();

@@ -16,12 +16,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /**
- * The client the SERVICE channel actually posts with.
- *
- * <p>Asserted through the bean rather than through the factory helper the channel's own test uses.
- * Those two are different things, and only one of them ships: dropping the request factory from the
- * bean would leave a client with no timeouts at all -- the failure every guard around those two
- * values exists to prevent -- while every other test stayed green.
+ * The client the SERVICE channel actually posts with, asserted through the bean rather than the
+ * factory helper the channel's own test uses -- only one of them ships, and dropping the request
+ * factory from the bean would leave a client with no timeouts while every other test stayed green.
  */
 class ChannelConfigTest {
 
@@ -81,9 +78,7 @@ class ChannelConfigTest {
                         });
     }
 
-    /**
-     * @return the channel configuration with the two beans Boot would otherwise supply it
-     */
+    /** The channel configuration with the two beans Boot would otherwise supply it. */
     private static ApplicationContextRunner channelContext() {
         return new ApplicationContextRunner()
                 .withUserConfiguration(ChannelConfig.class)
@@ -107,13 +102,8 @@ class ChannelConfigTest {
     }
 
     /**
-     * Only the two timeouts are what this test is about. The rest of the configuration has to be
-     * present and valid for the record to exist at all, and carries the shipped defaults so that
+     * Only the two timeouts are what this test is about; the rest carries the shipped defaults so
      * nothing here reads as a value chosen for the test.
-     *
-     * @param connect the connect timeout under test
-     * @param read the read timeout under test
-     * @return a complete configuration differing only in those two
      */
     private static NotificationsProperties propertiesWith(Duration connect, Duration read) {
         return new NotificationsProperties(

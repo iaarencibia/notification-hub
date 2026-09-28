@@ -24,17 +24,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * The persistence adapter against the real schema, on a real PostgreSQL.
+ * The persistence adapter against the real schema, on a real PostgreSQL. Half of what is under test
+ * here is enforced by the database, not Java: the partial unique index on the idempotency key, the
+ * check constraint that forbids a claimed row without an owner, and the JSONB column the metadata
+ * lands in. An in-memory substitute would agree with whatever the mapper did.
  *
- * <p>It has to be the real one. Half of what is under test here is enforced by the database and not
- * by Java: the partial unique index on the idempotency key, the check constraint that forbids a
- * claimed row without an owner, and the JSONB column the payload metadata lands in. An in-memory
- * substitute would agree with whatever the mapper did.
- *
- * <p>The rows for the rehydration cases are written with SQL rather than through the repository,
- * for two reasons. It is the only way to give every column a distinct value, which is what makes a
- * crossed pair of same-typed fields visible; and it keeps this PR from growing an update path that
- * nothing yet calls -- the intake endpoint only ever inserts.
+ * <p>The rehydration rows are written with SQL rather than through the repository: it gives every
+ * column a distinct value, which is what makes a crossed pair of same-typed fields visible, and it
+ * avoids growing an update path nothing yet calls -- the intake endpoint only ever inserts.
  */
 @SpringBootTest
 class NotificationRepositoryIT extends IntegrationTestSupport {
@@ -68,11 +65,9 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
     @Test
     @DisplayName("writes the budget the aggregate carries, not a number of its own")
     void writesTheBudgetTheAggregateCarries() {
-        // Five, and deliberately not the three the application is configured with. An assertion
-        // made against the configured default is satisfied by a mapper that writes that same
-        // constant, so it cannot tell the two apart -- and a mapper choosing its own budget is
-        // exactly the failure that matters here: every notification would carry a retry
-        // allowance nobody asked for, and a budget of one means no retry at all.
+        // Five, deliberately not the three the application is configured with: an assertion
+        // against the configured default is satisfied by a mapper writing that same constant,
+        // so it cannot tell the two apart.
         Notification submitted =
                 Notification.submit(
                         UUID.randomUUID(),
@@ -179,8 +174,7 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
 
         // The exclusion is the database's, not the code's: the partial unique index is what a
         // second concurrent request runs into, and no check-then-write in Java could close that
-        // window on its own. What crosses the port, though, is the adapter's own exception --
-        // the layer above must not have to know what a data integrity violation is.
+        // window. What crosses the port is the adapter's own exception.
         assertThatExceptionOfType(IdempotencyKeyAlreadyUsedException.class)
                 .isThrownBy(
                         () ->
@@ -229,10 +223,9 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
                         3,
                         Instant.now()));
 
-        // Asserted row by row, not by counting the rows that carry the correlation id. A count
-        // would be a census of the whole table, coupling this test to every other one that uses
-        // the same identifier -- and an operation may hold any number of notifications, so no
-        // total is the behaviour under test.
+        // Asserted row by row, not by counting rows that carry the correlation id: a count
+        // would couple this test to every other one using the same identifier, and an
+        // operation may hold any number of notifications.
         Notification toTheBuyer = repository.findByIdempotencyKey("key-to-the-buyer").orElseThrow();
         Notification toTheWarehouse =
                 repository.findByIdempotencyKey("key-to-the-warehouse").orElseThrow();
@@ -253,10 +246,9 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
     }
 
     /**
-     * Writes a row directly, so that a state the intake endpoint cannot produce -- anything past
-     * PENDING with no attempts -- can be read back. The column list is spelled out here rather than
-     * reused from the mapper: a test that builds its expectation with the code under test proves
-     * nothing.
+     * Writes a row directly, so a state the intake endpoint cannot produce can be read back. The
+     * column list is spelled out here, not reused from the mapper: a test that builds its
+     * expectation with the code under test proves nothing.
      */
     private void insertRow(
             UUID id,

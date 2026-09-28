@@ -28,17 +28,13 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 /**
  * The intake endpoint end to end: the real filter chain, the real controller, the real use case and
- * a real PostgreSQL.
+ * a real PostgreSQL. Most of what it proves is only true when all of it runs together -- a repeated
+ * idempotency key returning the first identifier depends on a unique index, an unknown channel
+ * being a {@code 400} depends on the exception handler, and reachability at all depends on the
+ * security chain.
  *
- * <p>This is the integration test over the main REST endpoint, and it is here rather than at a
- * lower level because most of what it proves is only true when all of it runs together. That a
- * repeated idempotency key returns the first notification's identifier depends on a unique index;
- * that an unknown channel is a {@code 400} and not a {@code 500} depends on the exception handler
- * being registered; that any of it is reachable at all depends on the security chain accepting the
- * credential.
- *
- * <p>Rows are asserted through their own idempotency key rather than by counting the table, so no
- * test here can be made to pass or fail by what another one wrote.
+ * <p>Rows are asserted through their own idempotency key, not by counting the table, so no test
+ * here can be made to pass or fail by what another one wrote.
  */
 @SpringBootTest(properties = IntegrationTestSupport.API_KEY_PROPERTY)
 @AutoConfigureMockMvc
@@ -96,12 +92,8 @@ class NotificationIntakeIT extends IntegrationTestSupport {
         assertThat(row.get("attempts")).isEqualTo(0);
         assertThat(row.get("claimed_by")).isNull();
         assertThat(row.get("sent_at")).isNull();
-        // The configured budget, stamped on the row: what this pins is that the value travels
-        // from configuration to column through the whole path. It cannot also pin the mapper
-        // against a constant, because three is the configured default and a mapper writing that
-        // same literal would satisfy it. That case belongs to
-        // NotificationRepositoryIT.writesTheBudgetTheAggregateCarries, which asserts a budget
-        // the configuration never produces.
+        // Pins that the configured budget travels from configuration to column. Pinning the mapper
+        // against a literal 3 is NotificationRepositoryIT.writesTheBudgetTheAggregateCarries' job.
         assertThat(row.get("max_attempts")).isEqualTo(3);
         // The insert is the enqueue: nothing else has to happen for this row to be picked up.
         assertThat((java.sql.Timestamp) row.get("next_attempt_at"))
@@ -132,10 +124,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Test
     @DisplayName("leaves the stored notification untouched when a repeat carries other headers")
     void aRepeatDoesNotDisturbTheStoredNotification() throws Exception {
-        // A real retry rarely reproduces the first request exactly -- a client that never sent a
-        // correlation id sends none again, and one that did may have moved on. Whatever arrives
-        // the second time, the notification that already exists keeps the identity it was filed
-        // under, because that is the one the first response referred to.
+        // A real retry rarely reproduces the first request exactly. Whatever arrives the second
+        // time, the notification that already exists keeps the identity it was filed under,
+        // since that is the one the first response referred to.
         mockMvc.perform(
                         submit(VALID_BODY)
                                 .header("X-Correlation-Id", "order-first")
@@ -155,10 +146,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Test
     @DisplayName("accepts two notifications of one operation, each with its own key")
     void acceptsTwoNotificationsOfTheSameOperation() throws Exception {
-        // The behaviour the two identifiers exist for, proven through the endpoint: a correlation
-        // id is shared by every notification of an operation, an idempotency key never is. Were
-        // the endpoint to cross them, the second would come back as a duplicate of the first and
-        // would never be delivered.
+        // Proven through the endpoint: a correlation id is shared by every notification of an
+        // operation, an idempotency key never is. Crossing them would make the second come back
+        // as a duplicate of the first and never be delivered.
         String toTheBuyer =
                 idOf(
                         mockMvc.perform(
@@ -206,11 +196,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Test
     @DisplayName("accepts a subject of 512 emoji, which the column measures as 512 characters")
     void acceptsASubjectOfEmojiAtTheColumnWidth() throws Exception {
-        // PostgreSQL counts characters and so does the domain; anything on this path that
-        // counted UTF-16 units instead would read 512 emoji as 1024 and turn a legal subject
-        // away, quoting back a limit the caller has not exceeded. The domain already asserts
-        // this about itself -- but the endpoint is the only way in, so if the endpoint refuses,
-        // that guarantee reaches nobody.
+        // Anything on this path that counted UTF-16 units instead would read 512 emoji as 1024
+        // and turn a legal subject away. The domain already asserts this about itself, but the
+        // endpoint is the only way in.
         String atTheLimit = "🚀".repeat(512);
 
         mockMvc.perform(
@@ -286,12 +274,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Test
     @DisplayName("refuses a channel the service does not have, and says which it does")
     void refusesAnUnknownChannel() throws Exception {
-        // Jackson rejects this before validation ever runs, so without a handler for it the
-        // caller would be told only that the body was unreadable.
-        //
-        // And the list it is offered is what this deployment can deliver, not what the type can
-        // parse -- EMAIL is a constant of the enum and has no adapter. Naming the constants here
-        // would tell a caller to send something that its next request would be refused for.
+        // Jackson rejects this before validation runs, so without a handler the caller would be
+        // told only that the body was unreadable. The list offered is what this deployment can
+        // deliver, not what the type can parse -- EMAIL has no adapter.
         mockMvc.perform(submit(VALID_BODY.replace("\"SERVICE\"", "\"SMS\"")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.channel").value("must be one of LOG, SERVICE"));
@@ -312,10 +297,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Test
     @DisplayName("names the priorities a caller may send, not just that the value was wrong")
     void refusesAnUnknownPriority() throws Exception {
-        // The counterpart of the channel case, and the one that keeps the generic enum branch
-        // honest: priority has no deployment-dependent subset, so its constants are the answer.
-        // Without this, that branch could be reduced to "is not of the expected type" and the
-        // descriptive error message would be lost with the suite still green.
+        // Keeps the generic enum branch honest: priority has no deployment-dependent subset, so
+        // its constants are the answer. Without this, that branch could collapse to "is not of
+        // the expected type" with the suite still green.
         mockMvc.perform(submit(VALID_BODY.replace("\"HIGH\"", "\"URGENT\"")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.priority").value("must be one of LOW, MEDIUM, HIGH"));
@@ -389,13 +373,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Test
     @DisplayName("refuses a correlation id outside the character set it is allowed")
     void refusesAMalformedCorrelationId() throws Exception {
-        // The value is written into a structured log line on every attempt, which is why the set
-        // is narrow. A newline is not the case to test here: it cannot travel in an HTTP header at
-        // all, and Spring Security's firewall rejects it before any controller sees it. A space
-        // can arrive, and must still be refused.
-        // Asserted whole rather than by fragment. The reason sits under the header's own name, so
-        // repeating that name inside the message would read as a stutter -- and only an exact
-        // comparison notices if it comes back.
+        // The value is written into a structured log line on every attempt, hence the narrow
+        // set. A newline cannot travel in an HTTP header at all, and Spring Security's firewall
+        // rejects it before any controller sees it; a space can arrive and must still be refused.
         mockMvc.perform(submit(VALID_BODY).header("X-Correlation-Id", "order 4471"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -478,8 +458,7 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Test
     @DisplayName("answers a refusal and a rejection in the same shape, from its two producers")
     void bothProducersAgreeOnTheShape() throws Exception {
-        // The authentication entry point and the exception handler are two separate producers of
-        // these responses, because a credential is refused in the filter chain and a body is
+        // Two separate producers: a credential is refused in the filter chain, a body is
         // rejected in the controller. The README promises RFC 9457 for both, and only this
         // comparison keeps that promise honest.
         MvcResult refused =
@@ -499,10 +478,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
 
             JsonNode problem = objectMapper.readTree(result.getResponse().getContentAsString());
 
-            // Compared exactly, not by containment. A subset check passes while one producer
-            // quietly omits a member the other sends -- which is exactly what happened: the 401
-            // carried no instance, because Spring fills that in on the way out of the dispatcher
-            // servlet and a refusal in the filter chain never reaches it.
+            // Compared exactly, not by containment: a subset check passed while the 401 quietly
+            // omitted "instance," which Spring fills in on the way out of the dispatcher
+            // servlet -- and a refusal in the filter chain never reaches it.
             Set<String> members = new TreeSet<>();
             problem.fieldNames().forEachRemaining(members::add);
             // errors is an extension member of RFC 9457, present only when there is a list of
