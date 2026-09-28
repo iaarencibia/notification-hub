@@ -13,14 +13,13 @@ import org.springframework.stereotype.Component;
 /**
  * The outbound side of dispatch: claiming work, reporting on it, and recovering what was abandoned.
  *
- * <p>It sits outside {@link NotificationJpaStore} for the same reason its sibling does. The
- * provider's stale-state failure becomes Spring's {@code OptimisticLockingFailureException} in the
- * interceptor around a {@code @Repository} bean, on the way out of it; a {@code catch} written
- * inside that bean would never run.
+ * <p>Sits outside {@link NotificationJpaStore} for the same reason its sibling does: the provider's
+ * stale-state failure becomes Spring's {@code OptimisticLockingFailureException} in the interceptor
+ * around a {@code @Repository} bean, on the way out of it, so a {@code catch} written inside that
+ * bean would never run.
  *
- * <p>It answers two ports rather than one because both are statements against the same table and a
- * second class would add nothing. The separation that matters is on the calling side: the reaper
- * holds {@link AbandonedClaims} and has no way to claim anything.
+ * <p>Answers two ports, not one, because both are statements against the same table; the separation
+ * that matters is on the calling side, where the reaper holds only {@link AbandonedClaims}.
  */
 @Component
 class NotificationDispatchAdapter implements NotificationDispatchQueue, AbandonedClaims {
@@ -44,8 +43,8 @@ class NotificationDispatchAdapter implements NotificationDispatchQueue, Abandone
     @Override
     public void recordAttempt(ClaimedNotification claimed, NotificationAttempt attempt) {
         NotificationEntity entity = NotificationMapper.toEntity(claimed.notification());
-        // The version the row carried when it was claimed, not the one it carries now. Written
-        // against the current value the guard would pass every time and protect nothing.
+        // The version the row carried when it was claimed, not the one it carries now: written
+        // against the current value, the guard would pass every time and protect nothing.
         entity.setVersion(claimed.version());
 
         try {

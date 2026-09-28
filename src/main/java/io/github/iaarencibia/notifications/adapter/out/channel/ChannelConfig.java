@@ -12,10 +12,9 @@ import org.springframework.web.client.RestClient;
 /**
  * Assembles the channels that need something built for them.
  *
- * <p>It lives beside the adapters rather than in the configuration package because what it wires is
- * an adapter's own machinery -- a client with its timeouts -- and nothing above this package has
- * any business knowing that the SERVICE channel speaks HTTP at all. The log channel needs none of
- * this and declares itself.
+ * <p>Lives beside the adapters, not in the configuration package: what it wires is an adapter's own
+ * machinery -- a client with its timeouts -- and nothing above this package may know the SERVICE
+ * channel speaks HTTP at all.
  */
 @Configuration(proxyBeanMethods = false)
 class ChannelConfig {
@@ -27,41 +26,28 @@ class ChannelConfig {
     private static final String SERVICE_CHANNEL_CLIENT = "serviceChannelRestClient";
 
     /**
-     * A client of its own rather than a shared one. Its timeouts are chosen for a destination this
-     * service does not control and cannot trust to answer, which is not the posture any other
-     * outbound call in this application would want.
-     *
-     * <p>Which is why it is not a default candidate: were it one, a later call to some other
-     * service asking for a {@code RestClient} by type would silently inherit a five-second read
-     * timeout nobody chose for it. Only an injection point that names this client gets it.
-     *
-     * @param builder Boot's builder, carrying the customizers this client must keep
-     * @param properties the configured timeouts
-     * @return the client the SERVICE channel posts with
+     * A client of its own, not a shared one: its timeouts are chosen for a destination this service
+     * does not control, which is not a posture any other outbound call would want. Not a default
+     * candidate either -- a later call asking for a {@code RestClient} by type would otherwise
+     * silently inherit a timeout nobody chose for it.
      */
     @Bean(defaultCandidate = false)
     @Qualifier(SERVICE_CHANNEL_CLIENT)
     RestClient serviceChannelRestClient(
             RestClient.Builder builder, NotificationsProperties properties) {
-        // Boot's builder rather than RestClient.builder(), and the difference is not cosmetic:
-        // the static factory skips every customizer, including the one that instruments the call.
-        // The inbound side is metered automatically; this is the only call that leaves the
-        // process, and the only one whose latency the resilience requirement is about.
+        // Boot's builder, not RestClient.builder(): the static factory skips every customizer,
+        // including the one that instruments the call -- and this is the only call whose latency
+        // the resilience requirement is about.
         return builder.requestFactory(requestFactoryFor(properties.channels().service())).build();
     }
 
     /**
-     * Shared with the channel's own test, so that what the test measures is the client this service
-     * actually posts with. A test that assembles a client of its own proves how <em>that</em> one
-     * reports a timeout, and the classification under test is built entirely on how a timeout
-     * arrives.
+     * Shared with the channel's own test, so the test measures the client this service actually
+     * posts with -- the classification under test is built entirely on how a timeout arrives.
      *
-     * <p>Both timeouts matter, and the read one most: the connect timeout only covers a destination
-     * that never accepts the connection, and a destination that accepts and then goes quiet is the
-     * more common failure -- and the more expensive, because it holds a worker.
-     *
-     * @param service the configured timeouts
-     * @return the factory the SERVICE channel posts through
+     * <p>The read timeout matters most: the connect timeout only covers a destination that never
+     * accepts the connection, and one that accepts and then goes quiet -- the more common and more
+     * expensive failure -- is caught only by the read timeout.
      */
     static ClientHttpRequestFactory requestFactoryFor(
             NotificationsProperties.Channels.Service service) {
@@ -72,9 +58,8 @@ class ChannelConfig {
     }
 
     /**
-     * @param serviceChannelRestClient the client built above, asked for by name because it is no
-     *     longer offered to anyone who does not
-     * @return the SERVICE channel, ready to be found by the registry
+     * @param serviceChannelRestClient the client built above, asked for by name since it is not
+     *     offered to anyone who does not
      */
     @Bean
     NotificationChannelSender httpServiceChannelSender(

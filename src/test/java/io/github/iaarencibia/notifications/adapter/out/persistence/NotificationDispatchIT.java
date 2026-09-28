@@ -35,14 +35,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * Claiming, recording and reaping, against the real schema.
  *
- * <p>Everything under test here is the database's work rather than Java's: {@code SKIP LOCKED}, the
- * order the partial index serves rows in, the optimistic lock that refuses a write from an instance
- * whose claim was taken away, and the clock all three are measured against. None of it can be
- * observed without a real PostgreSQL and a second connection.
+ * <p>Everything under test here is the database's work, not Java's: {@code SKIP LOCKED}, the order
+ * the partial index serves rows in, the optimistic lock that refuses a stale write, and the clock
+ * all three are measured against -- none observable without a real PostgreSQL and a second
+ * connection.
  *
- * <p>This is the first test in the suite that queries the whole table rather than rows it looks up
- * by key, so it is also the first that has to start from an empty one -- the claim query does not
- * know which rows belong to which test.
+ * <p>The first test in the suite that queries the whole table rather than rows looked up by key, so
+ * also the first that has to start from an empty one.
  */
 @SpringBootTest
 class NotificationDispatchIT extends IntegrationTestSupport {
@@ -238,11 +237,7 @@ class NotificationDispatchIT extends IntegrationTestSupport {
         assertThat(secondClaim).isGreaterThan(firstClaim);
     }
 
-    /**
-     * @param claimed the notification to deliver
-     * @param outcome what the channel would have reported
-     * @return the attempt the aggregate produces, so the test writes what production writes
-     */
+    /** The attempt the aggregate produces, so the test writes what production writes. */
     private NotificationAttempt deliver(ClaimedNotification claimed, DispatchOutcome outcome) {
         Instant startedAt = clock.now();
         return claimed.notification()
@@ -261,9 +256,6 @@ class NotificationDispatchIT extends IntegrationTestSupport {
     /**
      * PostgreSQL stores timestamps to the microsecond, so an instant read back is never after the
      * one read before it, but may round a hair below it.
-     *
-     * @param instant the instant the claim cannot precede
-     * @return that instant, with a millisecond of slack
      */
     private static Instant beforeTheThousandthOf(Instant instant) {
         return instant.minusMillis(1);
@@ -288,16 +280,8 @@ class NotificationDispatchIT extends IntegrationTestSupport {
     }
 
     /**
-     * Written with SQL rather than through a repository, because no production path creates a row
-     * that is already overdue or already claimed -- and those are exactly the states the claim
-     * query and the reaper are about.
-     *
-     * @param status the lifecycle state the row starts in
-     * @param priority what decides its place in the claim order
-     * @param nextAttemptAt when it becomes claimable
-     * @param claimedAt when its owner took it, or {@code null}
-     * @param claimedBy the owner, or {@code null}
-     * @return the identity of the row
+     * Written with SQL rather than through a repository: no production path creates a row that is
+     * already overdue or already claimed, and those are exactly the states under test.
      */
     private UUID insert(
             NotificationStatus status,

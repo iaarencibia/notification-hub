@@ -19,20 +19,14 @@ import java.lang.annotation.Target;
 /**
  * A ceiling counted in characters, the way the database counts them.
  *
- * <p>{@code @Size} exists and would be shorter, and it is the wrong tool here: it measures {@code
- * CharSequence.length()}, which is UTF-16 code units. An emoji is one character for a {@code
- * VARCHAR} column and two for {@code length()}, so a subject of 512 emoji reads as 1024 and is
- * turned away -- with an error naming a limit the caller has not exceeded, over a value both the
- * column and the domain accept.
- *
- * <p>The domain already counts this way. Without this, the endpoint would be the one place in the
- * system that disagreed, and being the only way in, its answer would be the only one anybody ever
- * saw.
+ * <p>{@code @Size} measures {@code CharSequence.length()}, UTF-16 code units, not characters: an
+ * emoji is one character for a {@code VARCHAR} column and two for {@code length()}, so 512 emoji
+ * would read as 1024 and be turned away over a value the column and the domain both accept.
  */
 @Documented
 @Constraint(validatedBy = CharacterLength.Validator.class)
-// TYPE_USE is what lets this reach the keys and the values inside a Map, which are type
-// arguments rather than members and cannot be annotated any other way.
+// TYPE_USE lets this reach the keys and values inside a Map: type arguments, not members, and
+// otherwise unannotatable.
 @Target({FIELD, METHOD, PARAMETER, ANNOTATION_TYPE, RECORD_COMPONENT, TYPE_USE})
 @Retention(RetentionPolicy.RUNTIME)
 @interface CharacterLength {

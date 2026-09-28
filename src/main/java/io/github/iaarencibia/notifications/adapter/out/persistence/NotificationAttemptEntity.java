@@ -12,12 +12,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One attempt, as the row stores it. Written once and never updated: an attempt is something that
- * already happened.
+ * One attempt, as the row stores it. Written once and never updated.
  *
- * <p>The notification is held as a plain identifier rather than as an association. Mapping it as
- * one would invite loading a notification's whole history alongside it, which is the cost the
- * aggregate was shaped to avoid -- and nothing in this direction ever needs to navigate back.
+ * <p>The notification is held as a plain identifier, not an association: mapping it as one would
+ * invite loading a notification's whole history alongside it, and nothing in this direction ever
+ * needs to navigate back.
  */
 @Entity
 @Table(name = "notification_attempt")
@@ -50,9 +49,8 @@ class NotificationAttemptEntity {
     private Instant finishedAt;
 
     /**
-     * Stored rather than derived on read, because the question this table answers -- how long
-     * deliveries to a destination are taking -- is one the database has to be able to aggregate
-     * without reconstructing every row.
+     * Stored rather than derived on read: the database has to aggregate delivery duration without
+     * reconstructing every row.
      */
     @Column(name = "duration_ms")
     private long durationMs;

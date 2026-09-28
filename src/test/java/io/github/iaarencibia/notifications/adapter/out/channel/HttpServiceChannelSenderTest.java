@@ -39,26 +39,22 @@ import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 
 /**
- * The SERVICE channel against a real HTTP server.
+ * The SERVICE channel against a real HTTP server: WireMock in-process on an ephemeral port, so this
+ * is a unit test in every way that matters. A real server is needed because the distinction under
+ * test -- a destination that refuses versus one that is unwell -- is only visible over a socket; a
+ * stubbed {@code RestClient} would return whatever it was told to.
  *
- * <p>WireMock runs in-process on an ephemeral port, so this is a unit test in every way that
- * matters: no container, no stack, no fixed port to collide with. What it needs a real server for
- * is that the distinction under test -- a destination that refuses versus one that is unwell -- is
- * only visible over a socket. A stubbed {@code RestClient} would return whatever it was told to,
- * which is the answer rather than the question.
- *
- * <p>The read timeout is deliberately short. A test that waits five seconds to prove a timeout is a
+ * <p>The read timeout is deliberately short: a test that waits five seconds to prove a timeout is a
  * test people start skipping.
  */
 class HttpServiceChannelSenderTest {
 
     /**
-     * Short enough that proving a timeout costs about a second, and wide enough that it never fires
-     * on a destination that did answer. Three hundred milliseconds was not: the first request
-     * against a freshly started WireMock takes several seconds to come back, so whichever case
-     * happened to run first failed with a timeout that said nothing about the code under test. The
-     * warm-up below removes that cost from the measurement rather than hiding it behind a number
-     * nobody could explain.
+     * Short enough that proving a timeout costs about a second, wide enough it never fires on a
+     * destination that did answer. Three hundred milliseconds was not: a freshly started WireMock's
+     * first request takes several seconds, so whichever case ran first failed with an unrelated
+     * timeout. The warm-up below pays that cost once instead of hiding it behind an unexplainable
+     * number.
      */
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(1);
 
@@ -271,10 +267,9 @@ class HttpServiceChannelSenderTest {
             }) // absolute http, no host to reach
     @DisplayName("answers, never throws, for a recipient no HTTP call can be built from")
     void neverThrowsForAnUnusableRecipient(String recipient) {
-        // The port promises that a failed delivery is an outcome and not an exception, and this
-        // is where that promise was broken: these parse as URIs and then throw unchecked past the
-        // catch below. A dispatcher trusting the promise would lose the attempt entirely, with no
-        // outcome recorded and no retry decision made.
+        // The port promises a failed delivery is an outcome, not an exception -- and this is
+        // where that promise was broken: these parse as URIs and then throw unchecked past the
+        // catch below, losing the attempt entirely with no outcome recorded.
         DispatchOutcome outcome = sender.send(notificationTo(recipient));
 
         assertThat(outcome)

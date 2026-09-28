@@ -9,20 +9,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Delivers a notification by writing it as a structured log line.
+ * Delivers a notification by writing it as a structured log line: always present, the only channel
+ * that cannot fail for a reason outside this process, so it reports {@link DispatchOutcome.Success}
+ * with no status code -- there is none to report.
  *
- * <p>The channel that is always present, and the only one that cannot fail for a reason outside
- * this process: there is no network, no destination and no timeout. It reports {@link
- * DispatchOutcome.Success} with no status code, because there is no status to report -- which is
- * exactly why {@code responseCode} is allowed to be null.
- *
- * <p>The fields are attached as key-value pairs rather than concatenated into the message, so that
- * they arrive in the JSON as members a log collector can filter on. A line that spells the payload
- * into its own text is searchable by substring and by nothing else.
- *
- * <p>The body is deliberately left out. It is the widest field a notification carries, and a log
- * line is not where its content belongs; what this line has to answer is that the delivery
- * happened, to whom, and as part of which operation.
+ * <p>Fields are attached as key-value pairs, not concatenated into the message, so a log collector
+ * can filter on them rather than search by substring. The body is left out: it is the widest field
+ * a notification carries, and this line only has to say that delivery happened, to whom, and as
+ * part of which operation.
  */
 @Component
 class LogChannelSender implements NotificationChannelSender {
@@ -36,9 +30,8 @@ class LogChannelSender implements NotificationChannelSender {
 
     @Override
     public DispatchOutcome send(Notification notification) {
-        // SLF4J's fluent API rather than a logging-framework helper: the key-value pairs are
-        // read by the ECS formatter Spring Boot already configures, so this adds no dependency
-        // and no encoder of its own.
+        // SLF4J's fluent API: the key-value pairs are read by the ECS formatter Spring Boot
+        // already configures, so this adds no dependency and no encoder of its own.
         log.atInfo()
                 .addKeyValue("notificationId", notification.id())
                 .addKeyValue("correlationId", notification.correlationId().value())

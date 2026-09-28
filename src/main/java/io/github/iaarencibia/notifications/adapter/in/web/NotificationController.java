@@ -19,13 +19,13 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The intake endpoint: the front door of the service.
  *
- * <p>It does three things and stops. It turns a request into a command, it hands that command to
- * the use case, and it turns the answer back into a response. No decision about notifications is
- * taken here, which is why nothing below this package knows that HTTP exists.
+ * <p>It does three things and stops: turns a request into a command, hands it to the use case,
+ * turns the answer back into a response. No decision about notifications is taken here, which is
+ * why nothing below this package knows that HTTP exists.
  *
- * <p>The answer is {@code 202 Accepted}, never {@code 201 Created} -- and not because nothing was
- * created, since the row is. {@code 201} is an answer about creation, and what this caller has to
- * know is that the delivery it asked for has not happened yet.
+ * <p>The answer is {@code 202 Accepted}, never {@code 201 Created} -- not because nothing was
+ * created, since the row is, but because what the caller has to know is that the delivery it asked
+ * for has not happened yet.
  */
 @RestController
 @RequestMapping(path = "/api/v1/notifications")
@@ -41,17 +41,9 @@ class NotificationController {
     }
 
     /**
-     * Accepts a notification for delivery.
-     *
-     * <p>A repeated {@code Idempotency-Key} is answered exactly like the request that first used
-     * it, with the same identifier and the same status, and creates nothing.
-     *
-     * @param request the notification to send, already validated field by field
-     * @param correlationHeader the caller's own grouping identifier, or {@code null} to have one
-     *     generated
-     * @param keyHeader the caller's own key making the request safe to repeat, or {@code null} when
-     *     it sent none
-     * @return {@code 202 Accepted} carrying the identifier of the notification
+     * Accepts a notification for delivery. A repeated {@code Idempotency-Key} is answered exactly
+     * like the request that first used it, with the same identifier and status, and creates
+     * nothing.
      */
     @PostMapping(
             consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -61,9 +53,8 @@ class NotificationController {
             @RequestHeader(name = CORRELATION_ID_HEADER, required = false) String correlationHeader,
             @RequestHeader(name = IDEMPOTENCY_KEY_HEADER, required = false) String keyHeader) {
 
-        // Both headers are read before either refusal is raised, so a caller that got two of them
-        // wrong hears about both at once. Stopping at the first would send it round the loop
-        // twice to learn what one response could have told it.
+        // Both headers are read before either refusal is raised, so a caller that got two wrong
+        // hears about both at once instead of round-tripping twice.
         Map<String, String> refusals = new TreeMap<>();
         CorrelationId correlationId = correlationId(correlationHeader, refusals);
         String key = idempotencyKey(keyHeader, refusals);
@@ -75,23 +66,18 @@ class NotificationController {
                 submitNotification.submit(
                         new SubmitNotificationCommand(request.toPayload(), correlationId, key));
 
-        // The correlation identifier is not echoed. A caller that sent none loses nothing it
-        // had: the response carries the notification's own id, which is what it correlates by.
-        // The header exists to group SEVERAL notifications of one operation, and only the
-        // caller that sends it knows what that grouping is.
+        // The correlation identifier is not echoed: the response carries the notification's own
+        // id, and the header exists to group several notifications of one operation, a grouping
+        // only the sending caller knows.
         return ResponseEntity.accepted().body(new SubmitNotificationResponse(id));
     }
 
-    /**
-     * The reasons are worded here rather than forwarded from the domain on purpose: the domain
-     * explains itself to a Java caller that passed a bad argument, and this explains itself to
-     * someone holding an HTTP client. Only the limits are shared, because those must not drift.
-     */
+    // The reasons are worded here rather than forwarded from the domain: the domain explains
+    // itself to a Java caller with a bad argument, this to someone holding an HTTP client. Only
+    // the limits are shared, because those must not drift.
     private static CorrelationId correlationId(String header, Map<String, String> refusals) {
         if (header == null) {
-            // The column is NOT NULL, and a grouping with holes in it groups nothing. A caller
-            // that sends none loses nothing it had: the response still carries the notification's
-            // own id. The header is for following several notifications at once.
+            // The column is NOT NULL, and a grouping with holes in it groups nothing.
             return CorrelationId.generate();
         }
         try {
@@ -103,8 +89,6 @@ class NotificationController {
                             + CorrelationId.MAX_LENGTH
                             + " characters, and may contain "
                             + "only letters, digits and the characters . _ : -");
-            // Null travels no further than the check above the call: a refusal collected here
-            // stops the request before the command is built.
             return null;
         }
     }
@@ -113,9 +97,9 @@ class NotificationController {
         if (header == null) {
             return null;
         }
-        // Blank is refused rather than read as absent. The empty string is not null, so the
-        // partial unique index would store it as a real key -- and every caller making the same
-        // mistake would then collide with every other one.
+        // Blank is refused rather than read as absent: the empty string is not null, so the
+        // partial unique index would store it as a real key and every caller making the same
+        // mistake would collide with all the others.
         if (header.isBlank()) {
             refusals.put(
                     IDEMPOTENCY_KEY_HEADER,

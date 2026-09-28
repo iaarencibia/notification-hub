@@ -28,14 +28,12 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 /**
  * Turns everything that can go wrong inside the dispatcher servlet into a problem detail.
  *
- * <p>It is the second of two producers of these responses, and that is not an oversight. The other,
- * the authentication entry point, answers refusals that happen in the filter chain, before a
- * request ever reaches a controller and therefore out of reach of any advice. The split follows
- * where the failure happens, and the two are held to the same shape by a test that asks both for
- * one and compares them.
+ * <p>The second of two producers of these responses: the authentication entry point answers
+ * refusals in the filter chain, before a request reaches a controller, so it cannot go through this
+ * advice. A test compares both for the same shape.
  *
- * <p>Extending Spring's own handler is what makes the rest of the surface -- wrong method, wrong
- * media type, missing parameter -- arrive in that shape too, instead of only the cases named here.
+ * <p>Extending Spring's own handler means the rest of the surface -- wrong method, wrong media
+ * type, missing parameter -- arrives in that shape too, not only the cases named here.
  */
 @RestControllerAdvice
 class ApiExceptionHandler extends ResponseEntityExceptionHandler {
@@ -45,22 +43,18 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     private final DeliverableChannels deliverableChannels;
 
     /**
-     * @param deliverableChannels the same set the use case decides with. Held here only to describe
-     *     it: a caller that named a channel it cannot use has to be told which ones it can, and
-     *     reporting the contract is what a web adapter is for. Nothing here decides anything
+     * @param deliverableChannels the same set the use case decides with, held only to describe it
+     *     in a refusal -- nothing here decides anything
      */
     ApiExceptionHandler(DeliverableChannels deliverableChannels) {
         this.deliverableChannels = deliverableChannels;
     }
 
     /**
-     * A field that failed validation is reported with the field's name and what it needed, which is
-     * the descriptive message a caller needs. No field <em>value</em> is echoed back.
-     *
-     * <p>One name is the caller's own text rather than ours: a violation inside {@code metadata} is
-     * reported as {@code metadata[<key>]}, because a caller holding thirty-two entries has to be
-     * told which one to shorten. Only the key travels, never the value, and it goes back as a JSON
-     * string to the client that sent it.
+     * A field that failed validation is reported by name with what it needed; no field value is
+     * echoed back. A violation inside {@code metadata} is reported as {@code metadata[<key>]} so a
+     * caller holding thirty-two entries knows which one to fix -- only the key travels, never the
+     * value.
      */
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
@@ -69,10 +63,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             HttpStatusCode status,
             WebRequest request) {
 
-        // Grouped into sorted sets rather than merged as they arrive. Bean Validation does not
-        // define the order it reports violations in, so a field breaking two rules at once --
-        // blank and over length, which a long run of spaces is -- would otherwise be described
-        // by a different string from one run to the next.
+        // Sorted sets, not merged as they arrive: Bean Validation does not guarantee violation
+        // order, so a field breaking two rules at once could be described differently from run
+        // to run.
         Map<String, SortedSet<String>> byName = new TreeMap<>();
         exception
                 .getFieldErrors()
@@ -80,9 +73,8 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                         error ->
                                 byName.computeIfAbsent(error.getField(), field -> new TreeSet<>())
                                         .add(String.valueOf(error.getDefaultMessage())));
-        // A constraint on the object as a whole has no field to report against, and there are
-        // none today. Reading them anyway is what keeps the first one that is ever added from
-        // being answered with a 400 whose error map names nothing.
+        // No global constraint exists today, but reading them anyway keeps the first one ever
+        // added from being answered with a 400 whose error map names nothing.
         exception
                 .getGlobalErrors()
                 .forEach(
@@ -129,12 +121,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Answers the headers the endpoint refused. Each is reported under its own name rather than
-     * under a field name, because that is what the caller has to go and change, and every one it
-     * got wrong is named at once for the same reason the body path names every field.
-     *
-     * @param exception the refusals, carrying the header each applies to
-     * @return the problem detail sent back to the caller
+     * Answers the headers the endpoint refused, each reported under its own name -- what the caller
+     * has to go change -- and all of them at once, for the same reason the body path names every
+     * field.
      */
     @ExceptionHandler(InvalidRequestException.class)
     ProblemDetail handleInvalidHeader(InvalidRequestException exception) {
@@ -146,13 +135,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Answers a channel this deployment has no adapter for. Reported under {@code channel}, the
-     * same name the field carries in the request, so a caller reads it exactly as it reads any
-     * other rejected field -- the fact that this one was decided by the use case and not by Bean
-     * Validation is this service's business, not the caller's.
-     *
-     * @param exception the refusal, carrying what was asked for and what is available
-     * @return the problem detail sent back to the caller
+     * Answers a channel this deployment has no adapter for, reported under {@code channel} -- the
+     * same field name Bean Validation would use -- since which layer decided the refusal is this
+     * service's business, not the caller's.
      */
     @ExceptionHandler(UndeliverableChannelException.class)
     ProblemDetail handleUndeliverableChannel(UndeliverableChannelException exception) {
@@ -167,20 +152,14 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * The last resort, so that no caller ever receives the container's own error page in place of a
-     * problem detail. The cause is written to the log and not to the response: the caller can do
-     * nothing with a stack trace, and an unhandled failure is the worst place to start describing
-     * the inside of the service.
-     *
-     * @param exception whatever was not handled anywhere above
-     * @param request the request being served, named in the log so the entry can be found
-     * @return a problem detail that says only that the request failed
+     * The last resort, so no caller ever receives the container's own error page in place of a
+     * problem detail. The cause goes to the log, not the response: an unhandled failure is the
+     * worst place to start describing the inside of the service.
      */
     @ExceptionHandler(Exception.class)
     ProblemDetail handleAnythingElse(Exception exception, HttpServletRequest request) {
-        // The method and path are logged with the stack trace. Without them the entry says only
-        // that something failed somewhere, which is the one line in the log that most needs to
-        // say where -- and the caller cannot supply it, since the response deliberately does not.
+        // Method and path travel with the stack trace: the one log line that most needs to say
+        // where something failed is the one the caller's response deliberately withholds.
         log.error(
                 "Unhandled failure while serving {} {}",
                 request.getMethod(),
@@ -198,14 +177,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Names the values a caller may send, and for {@link Channel} that is not the same list as the
-     * type's own constants.
-     *
-     * <p>A channel exists in the model and is deliverable only where an adapter is wired, so the
-     * enum's constants are what parses and the deliverable set is what works. Answering with the
-     * constants would advertise a channel this deployment refuses -- and a caller that took the
-     * advice would be told, on its next request, that it may not send what it had just been told to
-     * send.
+     * Names the values a caller may send. For {@link Channel} that is the deliverable set, not the
+     * enum's constants: a channel parses without being deliverable, and answering with the
+     * constants would advertise one the next request would refuse.
      */
     private String reasonFor(InvalidFormatException invalidValue) {
         Class<?> expected = invalidValue.getTargetType();

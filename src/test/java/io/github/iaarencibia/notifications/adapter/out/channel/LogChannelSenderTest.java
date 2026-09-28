@@ -25,10 +25,8 @@ import org.slf4j.LoggerFactory;
  * The LOG channel, which is present in every deployment.
  *
  * <p>The log line is the delivery, so asserting that the method returned is not enough: a version
- * of this channel that reported success and wrote nothing would satisfy every caller and deliver
- * nothing at all. What is asserted is therefore the event itself, captured with an appender
- * attached to the real logger, and the key-value pairs the ECS formatter turns into members a log
- * collector can filter on.
+ * that reported success and wrote nothing would satisfy every caller and deliver nothing at all.
+ * What is asserted is the event itself, captured with an appender on the real logger.
  */
 class LogChannelSenderTest {
 

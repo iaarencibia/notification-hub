@@ -11,16 +11,13 @@ import org.springframework.stereotype.Component;
 /**
  * The outbound side of persistence: the only class that knows both the aggregate and the table.
  *
- * <p>It sits outside {@link NotificationJpaStore} rather than doing the work itself, and the reason
- * is worth stating because it is easy to get wrong. Spring turns the persistence provider's
- * constraint violation into its own {@code DataIntegrityViolationException} in the interceptor
- * around a {@code @Repository} bean -- which is to say, on the way out of it. Code written inside
- * that bean cannot catch the translated exception, because the translation has not happened yet.
- * Reacting to it therefore has to live one call further out, which is here.
+ * <p>Sits outside {@link NotificationJpaStore} rather than doing the work itself: Spring turns the
+ * provider's constraint violation into {@code DataIntegrityViolationException} in the interceptor
+ * around a {@code @Repository} bean, on the way out of it, so code written inside that bean cannot
+ * catch the translated exception.
  *
  * <p>What that buys is a port whose contract is the application's own: the layer above hears "that
- * key is taken", not "an integrity constraint failed", and needs neither the framework nor the
- * provider on its classpath to understand the difference.
+ * key is taken," not "an integrity constraint failed."
  */
 @Component
 class NotificationPersistenceAdapter implements NotificationRepository {
@@ -41,10 +38,9 @@ class NotificationPersistenceAdapter implements NotificationRepository {
                 // whatever was violated is not something the caller can recover from.
                 throw violation;
             }
-            // Narrowed by the key rather than by the constraint's name, which would be a literal
-            // with nothing keeping it honest. It is enough here: every other constraint on the
-            // table is satisfied by construction for a row submit() has just built -- PENDING,
-            // no attempts spent, no claim, and enums the domain owns.
+            // Narrowed by the key, not by the constraint's name -- a literal with nothing
+            // keeping it honest. Safe here: every other constraint is satisfied by construction
+            // for a row submit() has just built.
             throw new IdempotencyKeyAlreadyUsedException(notification.idempotencyKey(), violation);
         }
     }

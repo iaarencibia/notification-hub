@@ -13,12 +13,9 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
 /**
- * The timer that drives the whole thing.
- *
- * <p>It is the least interesting class in the change and the one whose absence is hardest to
- * notice: nothing this class does has a result anybody asserts on, so registering only one of the
- * two passes -- or none -- leaves every other test in the suite green while the delivered service
- * either never dispatches or never recovers abandoned work.
+ * The timer that drives the whole thing: registering only one of the two passes, or none, would
+ * leave every other test in the suite green while the delivered service either never dispatches or
+ * never recovers abandoned work.
  */
 class DispatchSchedulerConfigTest {
 
@@ -60,9 +57,8 @@ class DispatchSchedulerConfigTest {
     @Test
     @DisplayName("a pass that fails does not escape, so the timer survives it")
     void aFailedPassDoesNotEndTheSchedule() {
-        // A database that is briefly unreachable would otherwise end the schedule for the life of
-        // the process: the service would keep running and stop delivering, with one stack trace
-        // to explain it.
+        // Otherwise the service would keep running and stop delivering, with one stack trace to
+        // explain it.
         ScheduledTaskRegistrar registrar =
                 registrarFor(
                         () -> {
@@ -98,10 +94,6 @@ class DispatchSchedulerConfigTest {
         return registrarFor(dispatcher::dispatchDue);
     }
 
-    /**
-     * @param pass what the dispatch use case should do when its task runs
-     * @return a registrar the configuration has already written its tasks into
-     */
     private ScheduledTaskRegistrar registrarFor(Runnable pass) {
         DispatchSchedulerConfig config =
                 new DispatchSchedulerConfig(
