@@ -3,17 +3,14 @@ package io.github.iaarencibia.notifications.application.port.out;
 import java.time.Duration;
 
 /**
- * Work whose owner never came back. A port of its own so that the reaper, which performs
- * maintenance rather than delivery, has no way to claim anything.
+ * Releasing work whose owner never came back. A port of its own so the reaper cannot claim
+ * anything.
  */
 public interface AbandonedClaims {
 
     /**
-     * Returns to PENDING every notification claimed longer ago than {@code staleAfter}, measured
-     * against the database clock -- the comparison being between claim timestamps a different
-     * instance wrote and the present, which is exactly where two clocks would disagree.
+     * Measured against the database clock.
      *
-     * @param staleAfter how long a claim may stand before its owner is assumed dead
      * @return how many claims were released
      */
     int release(Duration staleAfter);

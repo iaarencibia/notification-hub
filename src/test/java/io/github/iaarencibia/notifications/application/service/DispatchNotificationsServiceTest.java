@@ -30,11 +30,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * What one pass of the dispatcher does with what it claims.
- *
- * <p>The deliveries run on the calling thread here, not because the real one does, but because a
- * pool would make every assertion below a race. What the pool buys is tested where it exists: in
- * the wiring, and in the integration test that drives real deliveries.
+ * What one pass of the dispatcher does with what it claims. Deliveries run on the calling thread so
+ * assertions do not race a pool; the pool is covered elsewhere.
  */
 class DispatchNotificationsServiceTest {
 
@@ -62,8 +59,7 @@ class DispatchNotificationsServiceTest {
     @Test
     @DisplayName("times every attempt by the shared clock, never by this process")
     void timesTheAttemptByTheSharedClock() {
-        // The instant a delivery finishes is what the next attempt is scheduled from, so a clock
-        // that drifts from the one the claim query reads moves rows in and out of being due.
+        // A clock drifting from the claim query's would move rows in and out of being due.
         queue.willClaim(claimed(Channel.SERVICE, 0));
 
         serviceDelivering(new DispatchOutcome.Success(200)).dispatchDue();
@@ -77,9 +73,7 @@ class DispatchNotificationsServiceTest {
     @Test
     @DisplayName("writes the result against the version the notification was claimed at")
     void writesAgainstTheClaimedVersion() {
-        // Not the version the row carries now. Against the current value the guard would pass
-        // every time, and an instance returning from a long delivery would overwrite whoever
-        // took its work after the reaper released it.
+        // The current version would always pass the guard, hiding an overwrite after release.
         queue.willClaim(new ClaimedNotification(dispatching(Channel.LOG), 7L));
 
         serviceDelivering(new DispatchOutcome.Success(null)).dispatchDue();
@@ -115,8 +109,7 @@ class DispatchNotificationsServiceTest {
 
             Notification notification = queue.recorded().getFirst().claimed().notification();
             assertThat(notification.status()).isEqualTo(NotificationStatus.PENDING);
-            // Counted from when the attempt ended, not when it began: a destination that took two
-            // seconds to refuse has already had those two seconds.
+            // Counted from when the attempt ended, not when it began.
             assertThat(notification.nextAttemptAt())
                     .isEqualTo(FINISHED_AT.plus(Duration.ofSeconds(5)));
             assertThat(notification.claimedBy())
@@ -142,8 +135,7 @@ class DispatchNotificationsServiceTest {
         @Test
         @DisplayName("a retryable failure on the last attempt is FAILED, not rescheduled")
         void retryableOnTheLastAttempt() {
-            // The boundary the budget exists for. Rescheduled here, the notification would be
-            // claimed again and the aggregate would refuse to record a fourth attempt.
+            // Rescheduled here, the aggregate would refuse a fourth attempt when claimed again.
             queue.willClaim(claimed(Channel.SERVICE, 2));
 
             serviceDelivering(new DispatchOutcome.RetryableFailure(503, "still down", null))
@@ -158,9 +150,7 @@ class DispatchNotificationsServiceTest {
     @Test
     @DisplayName("records a permanent failure for a channel this deployment cannot deliver")
     void aChannelWithNoAdapter() {
-        // Reachable when a row is accepted by a deployment that had the adapter and claimed by
-        // one that does not. Left alone it would be claimed, dropped, reaped and claimed again,
-        // for ever, with nothing in the table saying why.
+        // Reachable when a deployment without the adapter claims a row another one accepted.
         queue.willClaim(claimed(Channel.EMAIL, 0));
 
         int dispatched = serviceDelivering(new DispatchOutcome.Success(null)).dispatchDue();
@@ -174,9 +164,7 @@ class DispatchNotificationsServiceTest {
     @Test
     @DisplayName("a lost claim does not stop the rest of the batch")
     void aLostClaimIsAbsorbed() {
-        // Expected, not exceptional: the reaper released this row and somebody else delivered it.
-        // Escaping here it would reach the pool's default handler, and the notifications queued
-        // behind it in the same pass would never be attempted.
+        // Escaping here would reach the pool's default handler and stop the rest of the batch.
         queue.willClaim(claimed(Channel.LOG, 0), claimed(Channel.LOG, 0));
         queue.failFirstRecordWithLostClaim();
 
@@ -236,11 +224,7 @@ class DispatchNotificationsServiceTest {
         return dispatching(channel, 0);
     }
 
-    /**
-     * @param channel what the notification asks to be sent over
-     * @param attemptsAlreadySpent how much of the budget of three is gone
-     * @return a notification in the state the claim query leaves it in
-     */
+    /** A notification in the state the claim query leaves it in. */
     private static Notification dispatching(Channel channel, int attemptsAlreadySpent) {
         NotificationPayload payload =
                 new NotificationPayload(
@@ -271,10 +255,7 @@ class DispatchNotificationsServiceTest {
     /** What the queue was asked to write, so the assertions can look at it. */
     private record Recorded(ClaimedNotification claimed, NotificationAttempt attempt) {}
 
-    /**
-     * Stands in for storage. It hands out a prepared batch and keeps what it is told to write; it
-     * is not a stub of the real behaviour and makes no attempt to be one.
-     */
+    /** Hands out a prepared batch and records what it is told to write. */
     private static final class RecordingQueue implements NotificationDispatchQueue {
 
         private final Deque<ClaimedNotification> toClaim = new ArrayDeque<>();

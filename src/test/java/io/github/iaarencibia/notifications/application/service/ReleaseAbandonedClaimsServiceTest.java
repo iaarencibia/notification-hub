@@ -10,12 +10,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The reaper's one decision: how long a claim may stand before its owner is presumed dead.
- *
- * <p>It looks like a pass-through, and the threshold is why it is not. That number is the line
- * between recovering the work of an instance that died and taking work away from one that is merely
- * slow -- and the second produces duplicate delivery deliberately. Nothing else in the system is
- * positioned to notice if the wrong duration were handed to it.
+ * The reaper's one decision: how long a claim may stand before its owner is presumed dead. Too
+ * short, and work is taken from an instance that is merely slow, producing duplicate delivery.
  */
 class ReleaseAbandonedClaimsServiceTest {
 
@@ -24,9 +20,8 @@ class ReleaseAbandonedClaimsServiceTest {
     @Test
     @DisplayName("releases against the threshold it was built with, and not some other duration")
     void passesTheConfiguredThreshold() {
-        // That the right duration reaches this constructor is a different question, decided by
-        // the wiring and covered by DispatchWiringTest. This one only says the service passes on
-        // what it was given.
+        // Whether the right duration reaches this constructor is wiring's concern, covered by
+        // DispatchWiringTest.
         new ReleaseAbandonedClaimsService(claims, Duration.ofMinutes(5)).releaseAbandonedClaims();
 
         assertThat(claims.releasedOlderThan).isEqualTo(Duration.ofMinutes(5));
@@ -47,9 +42,8 @@ class ReleaseAbandonedClaimsServiceTest {
     @Test
     @DisplayName("refuses a threshold of zero, which would release every claim as it is taken")
     void refusesANonPositiveThreshold() {
-        // Zero means every claim is abandoned the instant it exists: rows would be returned to
-        // PENDING while the instance that owns them is mid-delivery, and every notification would
-        // be sent as many times as it is claimed.
+        // Rows would return to PENDING mid-delivery, so every notification would be sent as many
+        // times as it is claimed.
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> new ReleaseAbandonedClaimsService(claims, Duration.ZERO))
                 .withMessageContaining("staleClaimTimeout");

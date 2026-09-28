@@ -20,19 +20,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * One pass of the dispatcher.
- *
- * <p>The shape that matters is where the transactions end. Claiming a batch is one short
- * transaction; recording what a delivery came to is another; the network call happens between them,
- * holding no database connection at all. A single transaction spanning the call would tie up one
- * connection for as long as the slowest destination takes to time out, and a handful of those would
- * empty the pool the intake endpoint writes through -- a service that stops accepting notifications
- * because somebody else's server is slow.
- *
- * <p>What the gap costs is that a claim is a lock nothing enforces. An instance that dies holding
- * one leaves a row nobody will touch, which is why the reaper exists; and a claim the reaper
- * releases while its owner is still delivering is a notification that may be delivered twice.
- * At-least-once, declared rather than discovered.
+ * One pass of the dispatcher. Claiming a batch and recording each result are separate transactions;
+ * the delivery itself, between them, holds no database connection.
  */
 public final class DispatchNotificationsService implements DispatchDueNotificationsUseCase {
 
@@ -47,14 +36,8 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
     private final int batchSize;
 
     /**
-     * @param queue where work is claimed from and results are reported to
-     * @param senders the adapter answering for each deliverable channel
-     * @param clock the one clock; every instant handed to the aggregate comes from here
-     * @param retryPolicy the schedule a rescheduled notification follows
-     * @param deliveries runs the deliveries. Bounded, so that a slow destination costs a fixed
-     *     number of threads instead of one per notification
-     * @param instanceId identifies this instance on every row it claims
-     * @param batchSize how many notifications one pass takes
+     * @param deliveries bounded, so a slow destination costs a fixed number of threads rather than
+     *     one per notification
      */
     public DispatchNotificationsService(
             NotificationDispatchQueue queue,
@@ -86,15 +69,8 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
         return claimed.size();
     }
 
-    /**
-     * One delivery, from the claim to the record of what it came to.
-     *
-     * <p>Nothing may escape here. This runs on a worker of a pool whose only other option is to
-     * hand the throwable to a default handler that prints it and moves on, leaving the row
-     * DISPATCHING with nothing said about why.
-     *
-     * @param claimed the notification this instance owns, and the version it owns it at
-     */
+    // Nothing may escape here: the executor's default handler would just log the throwable and
+    // leave the row claimed forever.
     private void deliver(ClaimedNotification claimed) {
         Notification notification = claimed.notification();
         try {
@@ -112,17 +88,13 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
                     notification.payload().channel(),
                     attempt.outcome());
         } catch (ClaimLostException lostRace) {
-            // Expected, not a defect: the reaper released this claim, so the state this result
-            // was computed from is stale and the write was refused. Whether the notification has
-            // since been delivered by somebody else is not something this instance can tell.
+            // Expected: the reaper already released this claim, so the write was refused as stale.
             log.info(
                     "discarded the result of notification {}: {}",
                     notification.id(),
                     lostRace.getMessage());
         } catch (RuntimeException unexpected) {
-            // Covers the whole delivery, not only the write: the clock, the channel and the
-            // record. The row stays claimed either way, so the line has to say what an operator
-            // needs to know -- that it will not move again until the reaper releases it.
+            // The row stays claimed until the reaper releases it; an operator needs to know that.
             log.error(
                     "failed to dispatch notification {}; it stays claimed until the reaper "
                             + "releases it",
@@ -131,18 +103,13 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
         }
     }
 
-    /**
-     * @param notification the notification to deliver
-     * @return what the channel reported, or a permanent failure when no channel answers for it
-     */
     private DispatchOutcome attemptDelivery(Notification notification) {
         Channel channel = notification.payload().channel();
         NotificationChannelSender sender = senders.get(channel);
 
         if (sender == null) {
-            // Only reachable for a row accepted by a deployment that could deliver this channel
-            // and claimed by one that cannot. Failed permanently rather than left alone: retrying
-            // would not find an adapter, and a row put back would be claimed and dropped forever.
+            // Reachable when a deployment claims a row for a channel it no longer has an adapter
+            // for. Failed permanently: retrying would still find no adapter.
             return new DispatchOutcome.PermanentFailure(
                     null, "this deployment has no adapter for channel " + channel);
         }

@@ -5,24 +5,15 @@ import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
 import java.time.Duration;
 import java.util.Objects;
 
-/**
- * The reaper.
- *
- * <p>It holds one thing the scheduler that drives it has no business knowing: how long a claim may
- * stand before its owner is presumed dead. That is a policy of the application, not a detail of how
- * often a timer fires.
- */
+/** The reaper: releases claims whose owner never came back. */
 public final class ReleaseAbandonedClaimsService implements ReleaseAbandonedClaimsUseCase {
 
     private final AbandonedClaims abandonedClaims;
     private final Duration staleClaimTimeout;
 
     /**
-     * @param abandonedClaims where claims are released
-     * @param staleClaimTimeout how long a claim may stand. It cannot be shortened without
-     *     consequence: the threshold is what separates an instance that died from one that is
-     *     merely slow, and getting that wrong means delivering the same notification twice on
-     *     purpose
+     * @param staleClaimTimeout too short, and work is taken from a merely slow instance, producing
+     *     duplicate delivery
      */
     public ReleaseAbandonedClaimsService(
             AbandonedClaims abandonedClaims, Duration staleClaimTimeout) {

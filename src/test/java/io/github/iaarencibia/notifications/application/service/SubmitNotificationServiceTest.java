@@ -27,12 +27,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The intake use case, with storage replaced by a double that enforces the one rule the real
- * adapter delegates to a unique index.
- *
- * <p>The double is written out rather than mocked because the behaviour under test is a
- * conversation, not a call: save, collide, look up, answer. A mock would have to be told the answer
- * to the lookup, which is the part worth proving.
+ * The intake use case, with storage replaced by a hand-written double enforcing the one rule the
+ * real adapter delegates to a unique index: save, collide, look up, answer.
  */
 class SubmitNotificationServiceTest {
 
@@ -43,10 +39,7 @@ class SubmitNotificationServiceTest {
     private static final DeliverableChannels DELIVERABLE =
             new DeliverableChannels(Set.of(Channel.LOG, Channel.SERVICE));
 
-    /**
-     * A value no machine clock would produce, so an instant that came from {@code Instant.now()}
-     * instead of from the port is visible rather than merely plausible.
-     */
+    /** A value no machine clock would produce, so a leaked {@code Instant.now()} is visible. */
     private static final Instant SHARED_NOW = Instant.parse("2026-09-03T10:00:00Z");
 
     private final InMemoryNotifications repository = new InMemoryNotifications();
@@ -56,9 +49,8 @@ class SubmitNotificationServiceTest {
     @Test
     @DisplayName("refuses a channel nothing can deliver, and writes no row")
     void refusesAnUndeliverableChannel() {
-        // EMAIL is a legal value of the domain type and has no adapter in this deployment.
-        // Accepting it would answer the caller 202 and leave a row that fails every attempt
-        // until its budget ran out -- a delivery reported as accepted that was never possible.
+        // EMAIL is a legal domain value with no adapter in this deployment: accepting it would
+        // answer 202 and then fail every attempt until the budget ran out.
         NotificationPayload toEmail =
                 new NotificationPayload(
                         "someone@example.test",
@@ -77,8 +69,7 @@ class SubmitNotificationServiceTest {
                 .satisfies(
                         thrown -> {
                             assertThat(thrown.channel()).isEqualTo(Channel.EMAIL);
-                            // Sorted and named as they travel, so the caller is told what to use
-                            // instead.
+                            // The order is stable, so the caller reads the same list every time.
                             assertThat(thrown.deliverable().describe()).isEqualTo("LOG, SERVICE");
                         });
 
@@ -121,10 +112,8 @@ class SubmitNotificationServiceTest {
     @Test
     @DisplayName("stamps the shared clock's instant, not this machine's")
     void stampsTheSharedClock() {
-        // The claim query decides what is due by comparing next_attempt_at against the database's
-        // own now(). Written from the JVM, an instance running ahead of the database queues work
-        // that nothing may take yet -- and the answer this project gives to "what clock does the
-        // system use" would be false.
+        // The claim query compares next_attempt_at against the database's own now(); written
+        // from the JVM, an instance running ahead would queue work nobody may take yet.
         service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-clock"));
 
         Notification stored = repository.only();
@@ -136,8 +125,7 @@ class SubmitNotificationServiceTest {
     @Test
     @DisplayName("stamps the configured budget on the row, not a number of its own")
     void stampsTheConfiguredBudget() {
-        // Persisted per row on purpose: a notification keeps the budget it was promised even if
-        // the configuration changes while it is still in flight.
+        // Kept even if configuration changes while the notification is still in flight.
         SubmitNotificationService withADifferentBudget =
                 new SubmitNotificationService(repository, () -> SHARED_NOW, 7, DELIVERABLE);
 
@@ -182,9 +170,8 @@ class SubmitNotificationServiceTest {
     @Test
     @DisplayName("lets two notifications of one operation through, each with its own key")
     void acceptsTwoNotificationsOfTheSameOperation() {
-        // The identifiers pull in opposite directions and must not be confused: a correlation id
-        // is shared by every notification of an operation, an idempotency key never is. Were the
-        // service to treat the correlation id as the key, only the first would ever be sent.
+        // Correlation id is shared across an operation's notifications; idempotency key never is.
+        // Confusing the two would silently drop every notification after the first.
         UUID toTheBuyer =
                 service.submit(
                         new SubmitNotificationCommand(
@@ -201,9 +188,8 @@ class SubmitNotificationServiceTest {
     @Test
     @DisplayName("refuses to answer when the notification that rejected the insert cannot be read")
     void refusesToInventAnAnswer() {
-        // Nothing in this service deletes a row, so a key that is taken and yet unreadable is
-        // corruption. Answering with a fresh identifier would tell the caller its notification
-        // was accepted when none exists.
+        // Nothing deletes a row, so a taken key with no row behind it is corruption, not a
+        // recoverable race.
         service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
         repository.hideEverything();
 
@@ -218,11 +204,8 @@ class SubmitNotificationServiceTest {
     @Test
     @DisplayName("requires a command, and says so rather than failing wherever it first reads one")
     void requiresACommand() {
-        // The message is asserted, and that is the whole point of the test. Without the guard the
-        // call still throws a NullPointerException -- the very next statement dereferences the
-        // argument -- so a bare assertThatNullPointerException would pass with the guard deleted
-        // and prove nothing. What the guard buys is a caller told which argument was null instead
-        // of being handed a stack trace pointing into the middle of the method.
+        // The message is what this test proves: without the guard, the next statement would still
+        // throw NPE, so an unguarded assertThatNullPointerException would pass and prove nothing.
         assertThatNullPointerException()
                 .isThrownBy(() -> service.submit(null))
                 .withMessage("command must not be null");
@@ -238,10 +221,7 @@ class SubmitNotificationServiceTest {
                 Map.of("orderId", "4471"));
     }
 
-    /**
-     * Storage reduced to the one rule the real adapter does not implement either: the database
-     * refuses a repeated idempotency key, and everything above finds out by being told.
-     */
+    /** Storage reduced to the one rule that matters: a repeated idempotency key is refused. */
     private static final class InMemoryNotifications implements NotificationRepository {
 
         private final Map<UUID, Notification> byId = new LinkedHashMap<>();
