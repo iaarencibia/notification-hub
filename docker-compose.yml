@@ -11,10 +11,9 @@ services:
     image: postgres:17-alpine
     container_name: notifications-postgres
     environment:
-      # Development defaults, applied when nothing overrides them, so that the stack
-      # starts on a clean checkout with no prior setup. Exporting the variable — or
-      # placing it in a .env file, which Compose reads on its own — replaces the value
-      # without editing this file.
+      # Development defaults, applied only when nothing overrides them, so the stack starts on
+      # a clean checkout with no prior setup. Exporting the variable, or placing it in a `.env`
+      # file Compose reads on its own, replaces the value without editing this file.
       #
       # The same three variables are reused by the application service below, so the
       # credentials cannot drift between the database and the client that connects to it.
@@ -36,9 +35,9 @@ services:
       start_period: 10s
 
   wiremock:
-    # Stands in for the external service targeted by the SERVICE channel. Its stubs are
-    # preloaded with the three outcomes the dispatcher must distinguish: success,
-    # transient failure that recovers, and permanent rejection.
+    # Stands in for the external service targeted by the SERVICE channel. Its stubs cover every
+    # outcome the dispatcher must distinguish: immediate success, transient failure that
+    # recovers, permanent rejection, and a response slow enough to exceed the read timeout.
     image: wiremock/wiremock:3.13.2
     container_name: notifications-wiremock
     # Deliberately not started with --verbose: the logs that matter belong to the
@@ -74,8 +73,8 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-notifications}
       DB_USERNAME: ${POSTGRES_USER:-notifications}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-notifications}
-      # Development credential. Documented in the README; rotated per environment in
-      # any real deployment.
+      # Development credential, meant to be rotated per real deployment; kept as a default
+      # so the stack starts without any secret provisioning on a clean checkout.
       NOTIFICATIONS_API_KEY: ${NOTIFICATIONS_API_KEY:-local-dev-api-key-change-me}
       LOG_LEVEL_APP: ${LOG_LEVEL_APP:-DEBUG}
     ports:

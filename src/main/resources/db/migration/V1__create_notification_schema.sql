@@ -1,10 +1,9 @@
 -- ---------------------------------------------------------------------------
 -- notification
 --
--- This table is both the record of the notification and the queue it waits in.
--- Because the intake endpoint writes it inside the request transaction, "persist"
--- and "enqueue" are a single atomic operation: there is no window in which a
--- notification is acknowledged to the caller but invisible to the dispatcher.
+-- This table is both the record of the notification and the queue it waits in. The intake
+-- endpoint writes it inside the request transaction, so "persist" and "enqueue" are one
+-- atomic operation: there is no window where a notification is acknowledged but invisible.
 -- ---------------------------------------------------------------------------
 CREATE TABLE notification
 (
@@ -14,10 +13,9 @@ CREATE TABLE notification
     recipient       VARCHAR(2048) NOT NULL,
     channel         VARCHAR(32)  NOT NULL,
     subject         VARCHAR(512) NOT NULL,
-    -- Bounded, and not TEXT. This is the content of the message, and sixteen
-    -- thousand characters is several pages -- past anything a message is, and short of a size
-    -- that hurts. It is not stored alone: the LOG channel writes it into a structured log line
-    -- and the SERVICE channel posts it to another service, so its width is paid three times.
+    -- Bounded, and not TEXT: this is the message content, and 16384 characters is well past
+    -- what a message needs but short of a size that hurts. Not stored alone -- the LOG channel
+    -- writes it to a structured log line and the SERVICE channel posts it to another service.
     body            VARCHAR(16384) NOT NULL,
     priority        VARCHAR(16)  NOT NULL,
     metadata        JSONB        NOT NULL DEFAULT '{}'::JSONB,
@@ -37,20 +35,18 @@ CREATE TABLE notification
     -- Trace identifier propagated from intake through every dispatch attempt.
     correlation_id  VARCHAR(128) NOT NULL,
 
-    -- Client-supplied key that makes the intake endpoint safe to retry. Optional: only
-    -- the client knows whether two requests are the same logical send, and forcing a key
-    -- would push indifferent callers into generating a fresh one per call, which removes
-    -- the protection while appearing to provide it.
+    -- Client-supplied key that makes the intake endpoint safe to retry. Optional, because
+    -- only the client knows whether two requests are the same logical send -- forcing one
+    -- would push indifferent callers into generating a fresh key per call, defeating it.
     idempotency_key VARCHAR(255),
 
     created_at      TIMESTAMPTZ  NOT NULL,
     updated_at      TIMESTAMPTZ  NOT NULL,
     sent_at         TIMESTAMPTZ,
 
-    -- Write counter, not an attempt counter: it moves on every update of the row and nothing
-    -- ever reads it for meaning. It exists so that a dispatcher holding a copy from before the
-    -- reaper released its row cannot write over a newer state. The dispatcher wires it in; a
-    -- row inserted by the intake endpoint has no concurrent writer to lose to.
+    -- Write counter, not an attempt counter: it moves on every update and nothing reads it
+    -- for meaning. It exists so a dispatcher holding a copy from before the reaper released
+    -- its row cannot write over a newer state; a row just inserted has no writer to lose to.
     version         BIGINT       NOT NULL DEFAULT 0,
 
     -- Numeric ordering key for priority. Kept as a generated column because the textual
@@ -70,14 +66,9 @@ CREATE TABLE notification
         CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH')),
     CONSTRAINT ck_notification_status
         CHECK (status IN ('PENDING', 'DISPATCHING', 'SENT', 'FAILED')),
-    -- The one place where the column and the domain do not state the same rule, and the
-    -- difference is the database's, not a decision. The domain bounds metadata the way a caller
-    -- understands it -- at most 32 entries, each key 128 characters and each value 2048 -- and a
-    -- CHECK cannot count an object's keys, because doing so needs a set-returning function and
-    -- therefore a subquery, which a CHECK may not contain. So the column bounds the consequence
-    -- instead: 32 entries at their full width serialise to roughly 72 kB, and the ceiling here
-    -- sits above that on purpose. It never fires before the domain rule does. It is a backstop
-    -- against a writer that reached the table without passing through the application at all.
+    -- Looser than the domain rule (32 entries, keys/values up to 128/2048 characters) because a
+    -- CHECK cannot count an object's keys without a subquery, which is not allowed here. This
+    -- byte-size ceiling is a backstop against a writer that reaches the table directly.
     CONSTRAINT ck_notification_metadata
         CHECK (jsonb_typeof(metadata) = 'object' AND length(metadata::text) <= 131072),
     CONSTRAINT ck_notification_attempts
@@ -113,10 +104,9 @@ CREATE INDEX idx_notification_stale_claims
 
 -- Idempotent intake.
 --
--- Unique and partial: a key may not repeat, and rows submitted without one are not
--- indexed at all. Enforcing it in the database rather than in application code is what
--- makes it correct under concurrency — two instances handling the same client retry
--- cannot both succeed, because one of them loses the insert.
+-- Unique and partial: a key may not repeat, and rows without one are not indexed at all.
+-- Enforcing it in the database rather than in application code is what makes it correct
+-- under concurrency -- two instances handling the same retry cannot both succeed.
 CREATE UNIQUE INDEX idx_notification_idempotency_key
     ON notification (idempotency_key)
     WHERE idempotency_key IS NOT NULL;
