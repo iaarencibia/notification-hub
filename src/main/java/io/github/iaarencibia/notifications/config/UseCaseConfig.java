@@ -25,14 +25,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /**
- * Where the use cases are assembled.
- *
- * <p>They are wired from here rather than annotated with {@code @Service} so that the application
- * layer carries no framework import at all, and takes its configuration as plain values instead of
- * as a bound properties object. That keeps the dependency pointing one way: this package knows the
- * use cases, and the use cases do not know this package exists.
- *
- * <p>It is also the single page a reader can open to see what this application is made of.
+ * Where the use cases are assembled, wired from here rather than annotated with {@code @Service} so
+ * the application layer carries no framework import and takes its configuration as plain values.
+ * Dependencies point one way: this package knows the use cases, not the reverse.
  */
 @Configuration(proxyBeanMethods = false)
 class UseCaseConfig {
@@ -54,12 +49,9 @@ class UseCaseConfig {
     }
 
     /**
-     * The schedule every reschedule follows, built once. Its own constructor is what refuses an
-     * impossible one -- a multiplier that shrinks the delay, a ceiling below the first backoff --
-     * and building it here means that refusal lands while the context starts.
-     *
-     * @param properties the configured schedule
-     * @return the policy the aggregate consults when it reschedules
+     * The schedule every reschedule follows, built once. Its own constructor refuses an impossible
+     * one -- a multiplier that shrinks the delay, a ceiling below the first backoff -- so building
+     * it here means that refusal lands while the context starts.
      */
     @Bean
     RetryPolicy retryPolicy(NotificationsProperties properties) {
@@ -68,15 +60,6 @@ class UseCaseConfig {
                 retry.initialBackoff(), retry.multiplier(), retry.maxBackoff(), retry.jitter());
     }
 
-    /**
-     * @param queue where work is claimed and results are written
-     * @param senders the adapter answering for each deliverable channel
-     * @param clock the database clock, the only one the application reads
-     * @param retryPolicy the schedule a rescheduled notification follows
-     * @param workers runs the deliveries, bounded
-     * @param properties the instance identity and the batch size
-     * @return the dispatcher, ready for a scheduler to drive
-     */
     @Bean
     DispatchDueNotificationsUseCase dispatchDueNotificationsUseCase(
             NotificationDispatchQueue queue,
@@ -95,11 +78,6 @@ class UseCaseConfig {
                 properties.dispatch().batchSize());
     }
 
-    /**
-     * @param abandonedClaims where claims are released
-     * @param properties how long a claim may stand before its owner is presumed dead
-     * @return the reaper
-     */
     @Bean
     ReleaseAbandonedClaimsUseCase releaseAbandonedClaimsUseCase(
             AbandonedClaims abandonedClaims, NotificationsProperties properties) {
@@ -112,12 +90,8 @@ class UseCaseConfig {
      * turns a slow destination into unbounded threads, and an unbounded queue turns it into
      * unbounded memory.
      *
-     * <p>Not a default candidate. Scheduling contributes an {@code Executor} of its own, so by type
-     * alone there is no answer; and its bounds and its saturation policy are chosen for outbound
-     * deliveries, which is not a posture anything else should inherit by accident.
-     *
-     * @param properties the configured pool and queue sizes
-     * @return the executor the dispatcher hands each delivery to
+     * <p>Not a default candidate: scheduling contributes an {@code Executor} of its own, so by type
+     * alone there is no answer, and this one's bounds are chosen for outbound deliveries only.
      */
     @Bean(defaultCandidate = false)
     @Qualifier(DISPATCH_WORKERS)
@@ -127,24 +101,17 @@ class UseCaseConfig {
         workers.setMaxPoolSize(properties.dispatch().workerPoolSize());
         workers.setQueueCapacity(properties.dispatch().workerQueueCapacity());
         workers.setThreadNamePrefix("dispatch-");
-        // With the queue full, the polling thread performs the delivery itself. That is the
-        // backpressure: while it is busy delivering it is not claiming more work, so the backlog
-        // stays in the table -- which is durable -- instead of in memory.
+        // With the queue full, the polling thread performs the delivery itself -- the
+        // backpressure: while it is busy delivering, it is not claiming more work into memory.
         workers.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-        // A claimed notification whose delivery is dropped at shutdown stays DISPATCHING until the
-        // reaper releases it, minutes later. Finishing what is in flight costs seconds.
+        // A claimed notification dropped at shutdown stays DISPATCHING until the reaper releases
+        // it, minutes later. Finishing what is in flight costs seconds.
         workers.setWaitForTasksToCompleteOnShutdown(true);
         workers.setAwaitTerminationSeconds(30);
         workers.initialize();
         return workers;
     }
 
-    /**
-     * The channel registry: which adapter answers for which channel.
-     *
-     * @param senders every channel adapter wired into this process
-     * @return the adapters, keyed by the channel each answers for
-     */
     @Bean
     Map<Channel, NotificationChannelSender> channelSenders(
             List<NotificationChannelSender> senders) {
@@ -152,8 +119,8 @@ class UseCaseConfig {
         for (NotificationChannelSender sender : senders) {
             if (byChannel.putIfAbsent(sender.channel(), sender) != null) {
                 // Refused at startup rather than resolved silently: with two senders claiming one
-                // channel, which of them delivers would be settled by the order Spring happens to
-                // return the beans in, and nobody chose that.
+                // channel, which delivers would be settled by the order Spring returns the beans
+                // in, and nobody chose that.
                 throw new IllegalStateException(
                         "more than one sender is registered for channel " + sender.channel());
             }
@@ -162,17 +129,9 @@ class UseCaseConfig {
     }
 
     /**
-     * What this deployment can send, derived from the adapters that are actually present rather
-     * than from a list written somewhere. The day an EMAIL adapter is added it becomes deliverable,
-     * and no validation and no error message has to be found and brought up to date -- which is the
-     * failure this shape exists to prevent, since anything that has to be kept in step eventually
-     * is not.
-     *
-     * <p>A bean rather than a private helper, because the web adapter needs the same answer to tell
-     * a caller what it may send. One object, so the decision and its explanation cannot come apart.
-     *
-     * @param channelSenders the registry above
-     * @return the channels those adapters answer for
+     * What this deployment can send, derived from the adapters actually present rather than a list
+     * kept in step by hand -- the failure this shape exists to prevent. A bean, not a private
+     * helper, so the web adapter gets the same answer when it tells a caller what it may send.
      */
     @Bean
     DeliverableChannels deliverableChannels(
