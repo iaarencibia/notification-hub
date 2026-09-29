@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,7 @@ class DispatchSchedulerConfigTest {
 
     private final CountingDispatcher dispatcher = new CountingDispatcher();
     private final CountingReaper reaper = new CountingReaper();
+    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
     @Test
     @DisplayName("registers both passes, each at its own configured interval")
@@ -70,6 +73,24 @@ class DispatchSchedulerConfigTest {
     }
 
     @Test
+    @DisplayName("counts the claims the reaper released")
+    void countsReleasedClaims() {
+        reaper.releasing = 3;
+
+        configuredRegistrar().getFixedDelayTaskList().get(1).getRunnable().run();
+
+        assertThat(registry.get("notifications.claims.released").counter().count()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("registers nothing for a reaper pass that released nothing")
+    void countsNothingWhenNothingWasReleased() {
+        configuredRegistrar().getFixedDelayTaskList().get(1).getRunnable().run();
+
+        assertThat(registry.find("notifications.claims.released").counter()).isNull();
+    }
+
+    @Test
     @DisplayName("is registered by default, and only switched off deliberately")
     void isOnUnlessTurnedOff() {
         // The tests turn it off for every context they boot, so nothing else would notice if the
@@ -87,6 +108,7 @@ class DispatchSchedulerConfigTest {
                 .withUserConfiguration(DispatchSchedulerConfig.class)
                 .withBean(DispatchDueNotificationsUseCase.class, () -> dispatcher)
                 .withBean(ReleaseAbandonedClaimsUseCase.class, () -> reaper)
+                .withBean(MeterRegistry.class, () -> registry)
                 .withBean(NotificationsProperties.class, DispatchSchedulerConfigTest::properties);
     }
 
@@ -102,7 +124,8 @@ class DispatchSchedulerConfigTest {
                             return 0;
                         },
                         reaper,
-                        properties());
+                        properties(),
+                        registry);
 
         ScheduledTaskRegistrar registrar = new ScheduledTaskRegistrar();
         config.configureTasks(registrar);
@@ -140,11 +163,12 @@ class DispatchSchedulerConfigTest {
     private static final class CountingReaper implements ReleaseAbandonedClaimsUseCase {
 
         private int passes;
+        private int releasing;
 
         @Override
         public int releaseAbandonedClaims() {
             passes++;
-            return 0;
+            return releasing;
         }
     }
 }

@@ -1,11 +1,13 @@
 package io.github.iaarencibia.notifications.config;
 
+import io.github.iaarencibia.notifications.adapter.out.observability.CompositeDispatchEvents;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
 import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
+import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
@@ -44,9 +46,10 @@ class UseCaseConfig {
             NotificationRepository repository,
             SystemClock clock,
             NotificationsProperties properties,
-            DeliverableChannels deliverableChannels) {
+            DeliverableChannels deliverableChannels,
+            IntakeEvents events) {
         return new SubmitNotificationService(
-                repository, clock, properties.retry().maxAttempts(), deliverableChannels);
+                repository, clock, properties.retry().maxAttempts(), deliverableChannels, events);
     }
 
     /**
@@ -65,7 +68,7 @@ class UseCaseConfig {
     DispatchDueNotificationsUseCase dispatchDueNotificationsUseCase(
             NotificationDispatchQueue queue,
             Map<Channel, NotificationChannelSender> senders,
-            DispatchEvents events,
+            List<DispatchEvents> events,
             SystemClock clock,
             RetryPolicy retryPolicy,
             @Qualifier(DISPATCH_WORKERS) Executor workers,
@@ -73,7 +76,7 @@ class UseCaseConfig {
         return new DispatchNotificationsService(
                 queue,
                 senders,
-                events,
+                new CompositeDispatchEvents(events),
                 clock,
                 retryPolicy,
                 workers,

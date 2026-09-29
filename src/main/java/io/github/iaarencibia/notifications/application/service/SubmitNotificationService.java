@@ -5,6 +5,7 @@ import io.github.iaarencibia.notifications.application.port.in.SubmitNotificatio
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
 import io.github.iaarencibia.notifications.application.port.out.IdempotencyKeyAlreadyUsedException;
+import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
 import io.github.iaarencibia.notifications.domain.Channel;
@@ -23,6 +24,7 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
     private final SystemClock clock;
     private final int maxAttempts;
     private final DeliverableChannels deliverableChannels;
+    private final IntakeEvents events;
 
     /**
      * @param clock the shared clock; the claim query compares against the same source
@@ -31,12 +33,14 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
             NotificationRepository repository,
             SystemClock clock,
             int maxAttempts,
-            DeliverableChannels deliverableChannels) {
+            DeliverableChannels deliverableChannels,
+            IntakeEvents events) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.maxAttempts = maxAttempts;
         this.deliverableChannels =
                 Objects.requireNonNull(deliverableChannels, "deliverableChannels must not be null");
+        this.events = Objects.requireNonNull(events, "events must not be null");
     }
 
     @Override
@@ -64,6 +68,7 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
 
         try {
             repository.save(notification);
+            events.accepted(notification);
             return notification.id();
         } catch (IdempotencyKeyAlreadyUsedException alreadyUsed) {
             // Not a failure: the caller gets back the identifier its first attempt created.
