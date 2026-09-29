@@ -8,6 +8,7 @@ import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationCommand;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
 import io.github.iaarencibia.notifications.application.port.out.IdempotencyKeyAlreadyUsedException;
+import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.CorrelationId;
@@ -16,8 +17,10 @@ import io.github.iaarencibia.notifications.domain.NotificationPayload;
 import io.github.iaarencibia.notifications.domain.NotificationStatus;
 import io.github.iaarencibia.notifications.domain.Priority;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -43,8 +46,10 @@ class SubmitNotificationServiceTest {
     private static final Instant SHARED_NOW = Instant.parse("2026-09-03T10:00:00Z");
 
     private final InMemoryNotifications repository = new InMemoryNotifications();
+    private final RecordingIntakeEvents events = new RecordingIntakeEvents();
     private final SubmitNotificationService service =
-            new SubmitNotificationService(repository, () -> SHARED_NOW, MAX_ATTEMPTS, DELIVERABLE);
+            new SubmitNotificationService(
+                    repository, () -> SHARED_NOW, MAX_ATTEMPTS, DELIVERABLE, events);
 
     @Test
     @DisplayName("refuses a channel nothing can deliver, and writes no row")
@@ -76,6 +81,24 @@ class SubmitNotificationServiceTest {
         assertThat(repository.stored())
                 .as("nothing may be stored for a notification that cannot be sent")
                 .isEmpty();
+        assertThat(events.accepted).isEmpty();
+    }
+
+    @Test
+    @DisplayName("reports the notification it saved as accepted, once")
+    void reportsAFreshSubmitAsAccepted() {
+        service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-1"));
+
+        assertThat(events.accepted).containsExactly(repository.only());
+    }
+
+    @Test
+    @DisplayName("does not report a replayed key as accepted again")
+    void doesNotReportAReplayAsAccepted() {
+        service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
+        service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
+
+        assertThat(events.accepted).hasSize(1);
     }
 
     @Test
@@ -127,7 +150,7 @@ class SubmitNotificationServiceTest {
     void stampsTheConfiguredBudget() {
         // Kept even if configuration changes while the notification is still in flight.
         SubmitNotificationService withADifferentBudget =
-                new SubmitNotificationService(repository, () -> SHARED_NOW, 7, DELIVERABLE);
+                new SubmitNotificationService(repository, () -> SHARED_NOW, 7, DELIVERABLE, events);
 
         withADifferentBudget.submit(
                 new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-1"));
@@ -219,6 +242,16 @@ class SubmitNotificationServiceTest {
                 "It is on its way.",
                 Priority.HIGH,
                 Map.of("orderId", "4471"));
+    }
+
+    private static final class RecordingIntakeEvents implements IntakeEvents {
+
+        private final List<Notification> accepted = new ArrayList<>();
+
+        @Override
+        public void accepted(Notification notification) {
+            accepted.add(notification);
+        }
     }
 
     /** Storage reduced to the one rule that matters: a repeated idempotency key is refused. */
