@@ -1,0 +1,17 @@
+package io.github.iaarencibia.notifications.application.port.out;
+
+import io.github.iaarencibia.notifications.domain.Notification;
+import io.github.iaarencibia.notifications.domain.NotificationAttempt;
+
+/**
+ * What happened to one delivery, reported in the language of the domain rather than logged
+ * directly.
+ */
+public interface DispatchEvents {
+
+    void dispatched(Notification notification, NotificationAttempt attempt);
+
+    void claimLost(Notification notification, ClaimLostException cause);
+
+    void failed(Notification notification, RuntimeException cause);
+}

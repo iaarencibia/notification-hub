@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.iaarencibia.notifications.application.port.out.ClaimLostException;
 import io.github.iaarencibia.notifications.application.port.out.ClaimedNotification;
+import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
@@ -41,6 +42,7 @@ class DispatchNotificationsServiceTest {
 
     private final RecordingQueue queue = new RecordingQueue();
     private final FixedClock clock = new FixedClock(STARTED_AT, FINISHED_AT);
+    private final RecordingEvents events = new RecordingEvents();
 
     @Test
     @DisplayName("claims a batch under this instance and reports how many it took")
@@ -185,6 +187,7 @@ class DispatchNotificationsServiceTest {
         new DispatchNotificationsService(
                         queue,
                         Map.of(Channel.LOG, log, Channel.SERVICE, service),
+                        events,
                         clock,
                         policy(),
                         Runnable::run,
@@ -196,6 +199,61 @@ class DispatchNotificationsServiceTest {
         assertThat(log.sent).as("the adapter for another channel is never asked").isEmpty();
     }
 
+    @Nested
+    @DisplayName("what deliver reports to the events port")
+    class EventsReporting {
+
+        @Test
+        @DisplayName("reports the recorded attempt after a successful recordAttempt")
+        void reportsTheDispatchedAttempt() {
+            queue.willClaim(claimed(Channel.LOG, 0));
+
+            serviceDelivering(new DispatchOutcome.Success(null)).dispatchDue();
+
+            NotificationAttempt recorded = queue.recorded().getFirst().attempt();
+            assertThat(events.dispatchedCalls).hasSize(1);
+            assertThat(events.dispatchedCalls.getFirst().attempt()).isEqualTo(recorded);
+        }
+
+        @Test
+        @DisplayName(
+                "reports the cause when recordAttempt throws ClaimLostException, and nothing escapes")
+        void reportsAClaimLostException() {
+            queue.willClaim(claimed(Channel.LOG, 0));
+            queue.failFirstRecordWithLostClaim();
+
+            int dispatched = serviceDelivering(new DispatchOutcome.Success(null)).dispatchDue();
+
+            assertThat(dispatched).isEqualTo(1);
+            assertThat(events.claimLostCalls).hasSize(1);
+            assertThat(events.claimLostCalls.getFirst().cause())
+                    .isInstanceOf(ClaimLostException.class);
+        }
+
+        @Test
+        @DisplayName("reports an unexpected RuntimeException from a sender, and nothing escapes")
+        void reportsAnUnexpectedFailure() {
+            queue.willClaim(claimed(Channel.LOG, 0));
+            RuntimeException boom = new IllegalStateException("boom");
+
+            int dispatched =
+                    new DispatchNotificationsService(
+                                    queue,
+                                    Map.of(Channel.LOG, new ThrowingSender(Channel.LOG, boom)),
+                                    events,
+                                    clock,
+                                    policy(),
+                                    Runnable::run,
+                                    INSTANCE,
+                                    25)
+                            .dispatchDue();
+
+            assertThat(dispatched).isEqualTo(1);
+            assertThat(events.failedCalls).hasSize(1);
+            assertThat(events.failedCalls.getFirst().cause()).isSameAs(boom);
+        }
+    }
+
     private DispatchNotificationsService serviceDelivering(DispatchOutcome outcome) {
         return new DispatchNotificationsService(
                 queue,
@@ -204,6 +262,7 @@ class DispatchNotificationsServiceTest {
                         new RecordingSender(Channel.LOG, outcome),
                         Channel.SERVICE,
                         new RecordingSender(Channel.SERVICE, outcome)),
+                events,
                 clock,
                 policy(),
                 Runnable::run,
@@ -317,6 +376,60 @@ class DispatchNotificationsServiceTest {
             sent.add(notification);
             return outcome;
         }
+    }
+
+    /**
+     * A sender that always throws, standing in for an adapter bug or an unhandled destination
+     * error.
+     */
+    private static final class ThrowingSender implements NotificationChannelSender {
+
+        private final Channel channel;
+        private final RuntimeException failure;
+
+        ThrowingSender(Channel channel, RuntimeException failure) {
+            this.channel = channel;
+            this.failure = failure;
+        }
+
+        @Override
+        public Channel channel() {
+            return channel;
+        }
+
+        @Override
+        public DispatchOutcome send(Notification notification) {
+            throw failure;
+        }
+    }
+
+    /** What deliver reported, so the assertions can look at it without a mocking framework. */
+    private static final class RecordingEvents implements DispatchEvents {
+
+        private final List<DispatchedCall> dispatchedCalls = new ArrayList<>();
+        private final List<ClaimLostCall> claimLostCalls = new ArrayList<>();
+        private final List<FailedCall> failedCalls = new ArrayList<>();
+
+        @Override
+        public void dispatched(Notification notification, NotificationAttempt attempt) {
+            dispatchedCalls.add(new DispatchedCall(notification, attempt));
+        }
+
+        @Override
+        public void claimLost(Notification notification, ClaimLostException cause) {
+            claimLostCalls.add(new ClaimLostCall(notification, cause));
+        }
+
+        @Override
+        public void failed(Notification notification, RuntimeException cause) {
+            failedCalls.add(new FailedCall(notification, cause));
+        }
+
+        private record DispatchedCall(Notification notification, NotificationAttempt attempt) {}
+
+        private record ClaimLostCall(Notification notification, ClaimLostException cause) {}
+
+        private record FailedCall(Notification notification, RuntimeException cause) {}
     }
 
     /** Two instants, in order, so a delivery has a measurable duration without sleeping. */

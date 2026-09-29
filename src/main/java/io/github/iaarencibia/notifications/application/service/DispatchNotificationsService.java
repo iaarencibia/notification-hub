@@ -3,6 +3,7 @@ package io.github.iaarencibia.notifications.application.service;
 import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.out.ClaimLostException;
 import io.github.iaarencibia.notifications.application.port.out.ClaimedNotification;
+import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
@@ -16,8 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * One pass of the dispatcher. Claiming a batch and recording each result are separate transactions;
@@ -25,10 +24,9 @@ import org.slf4j.LoggerFactory;
  */
 public final class DispatchNotificationsService implements DispatchDueNotificationsUseCase {
 
-    private static final Logger log = LoggerFactory.getLogger(DispatchNotificationsService.class);
-
     private final NotificationDispatchQueue queue;
     private final Map<Channel, NotificationChannelSender> senders;
+    private final DispatchEvents events;
     private final SystemClock clock;
     private final RetryPolicy retryPolicy;
     private final Executor deliveries;
@@ -42,6 +40,7 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
     public DispatchNotificationsService(
             NotificationDispatchQueue queue,
             Map<Channel, NotificationChannelSender> senders,
+            DispatchEvents events,
             SystemClock clock,
             RetryPolicy retryPolicy,
             Executor deliveries,
@@ -50,6 +49,7 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
 
         this.queue = Objects.requireNonNull(queue, "queue must not be null");
         this.senders = Map.copyOf(Objects.requireNonNull(senders, "senders must not be null"));
+        this.events = Objects.requireNonNull(events, "events must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy must not be null");
         this.deliveries = Objects.requireNonNull(deliveries, "deliveries must not be null");
@@ -82,24 +82,13 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
                     notification.recordAttempt(outcome, startedAt, finishedAt, retryPolicy);
             queue.recordAttempt(new ClaimedNotification(notification, claimed.version()), attempt);
 
-            log.debug(
-                    "dispatched notification {} over {}: {}",
-                    notification.id(),
-                    notification.payload().channel(),
-                    attempt.outcome());
+            events.dispatched(notification, attempt);
         } catch (ClaimLostException lostRace) {
             // Expected: the reaper already released this claim, so the write was refused as stale.
-            log.info(
-                    "discarded the result of notification {}: {}",
-                    notification.id(),
-                    lostRace.getMessage());
+            events.claimLost(notification, lostRace);
         } catch (RuntimeException unexpected) {
             // The row stays claimed until the reaper releases it; an operator needs to know that.
-            log.error(
-                    "failed to dispatch notification {}; it stays claimed until the reaper "
-                            + "releases it",
-                    notification.id(),
-                    unexpected);
+            events.failed(notification, unexpected);
         }
     }
 
