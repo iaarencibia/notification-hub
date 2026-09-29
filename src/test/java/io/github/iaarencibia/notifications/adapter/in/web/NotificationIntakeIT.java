@@ -7,15 +7,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.iaarencibia.notifications.IntegrationTestSupport;
+import io.github.iaarencibia.notifications.domain.Channel;
+import io.github.iaarencibia.notifications.domain.Priority;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -60,6 +68,75 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     @Autowired private JdbcTemplate jdbc;
 
     @Autowired private ObjectMapper objectMapper;
+
+    private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
+    private ch.qos.logback.classic.Logger controllerLogger;
+
+    @BeforeEach
+    void captureTheControllerLog() {
+        controllerLogger =
+                (ch.qos.logback.classic.Logger)
+                        LoggerFactory.getLogger(NotificationController.class);
+        controllerLogger.setLevel(Level.INFO);
+        logged.start();
+        controllerLogger.addAppender(logged);
+    }
+
+    @AfterEach
+    void releaseTheControllerLog() {
+        controllerLogger.detachAppender(logged);
+        logged.stop();
+    }
+
+    @Test
+    @DisplayName("logs the acceptance with the ids, channel and priority, under the caller's id")
+    void logsTheAcceptance() throws Exception {
+        MvcResult result =
+                mockMvc.perform(
+                                submit(VALID_BODY)
+                                        .header("Idempotency-Key", "it-logged")
+                                        .header("X-Correlation-Id", "order-4471"))
+                        .andExpect(status().isAccepted())
+                        .andReturn();
+
+        ILoggingEvent line = logged.list.getFirst();
+        assertThat(line.getLevel()).isEqualTo(Level.INFO);
+        assertThat(line.getFormattedMessage()).isEqualTo("notification accepted");
+        assertThat(fieldsOf(line))
+                .containsEntry("notificationId", UUID.fromString(idOf(result)))
+                .containsEntry("correlationId", "order-4471")
+                .containsEntry("channel", Channel.SERVICE)
+                .containsEntry("priority", Priority.HIGH);
+        assertThat(line.getMDCPropertyMap())
+                .as("the filter is wired into the application, ahead of the controller")
+                .containsEntry("correlationId", "order-4471");
+    }
+
+    @Test
+    @DisplayName("logs and stores one and the same generated id when the caller sent none")
+    void sharesTheGeneratedId() throws Exception {
+        mockMvc.perform(submit(VALID_BODY).header("Idempotency-Key", "it-logged-generated"))
+                .andExpect(status().isAccepted());
+
+        ILoggingEvent line = logged.list.getFirst();
+        Object stored = rowOf("it-logged-generated").get("correlation_id");
+        assertThat(fieldsOf(line)).containsEntry("correlationId", stored);
+        assertThat(line.getMDCPropertyMap()).containsEntry("correlationId", (String) stored);
+    }
+
+    @Test
+    @DisplayName("logs nothing for a refused request")
+    void logsNothingWhenRefused() throws Exception {
+        mockMvc.perform(submit(VALID_BODY).header("X-Correlation-Id", "order 4471"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(logged.list).isEmpty();
+    }
+
+    private static Map<String, Object> fieldsOf(ILoggingEvent event) {
+        return event.getKeyValuePairs().stream()
+                .collect(java.util.stream.Collectors.toMap(pair -> pair.key, pair -> pair.value));
+    }
 
     @Test
     @DisplayName("accepts a notification and answers 202 with its identifier")

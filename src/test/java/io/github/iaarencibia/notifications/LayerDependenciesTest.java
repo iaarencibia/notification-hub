@@ -7,9 +7,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
-/**
- * Enforces the dependency rule each layer's package-info states, rather than leaving it to review.
- */
+/** Enforces the dependency rule each layer's package-info states. */
 @AnalyzeClasses(
         packages = "io.github.iaarencibia.notifications",
         importOptions = ImportOption.DoNotIncludeTests.class)

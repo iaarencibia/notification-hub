@@ -64,6 +64,7 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
     public int dispatchDue() {
         List<ClaimedNotification> claimed = queue.claimDue(batchSize, instanceId);
         for (ClaimedNotification each : claimed) {
+            events.claimed(each.notification());
             deliveries.execute(() -> deliver(each));
         }
         return claimed.size();
@@ -84,10 +85,8 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
 
             events.dispatched(notification, attempt);
         } catch (ClaimLostException lostRace) {
-            // Expected: the reaper already released this claim, so the write was refused as stale.
             events.claimLost(notification, lostRace);
         } catch (RuntimeException unexpected) {
-            // The row stays claimed until the reaper releases it; an operator needs to know that.
             events.failed(notification, unexpected);
         }
     }

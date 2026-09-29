@@ -204,6 +204,38 @@ class DispatchNotificationsServiceTest {
     class EventsReporting {
 
         @Test
+        @DisplayName("reports each claimed notification, in order, before its own delivery starts")
+        void reportsEachClaimBeforeDelivering() {
+            ClaimedNotification first = claimed(Channel.LOG, 0);
+            ClaimedNotification second = claimed(Channel.SERVICE, 0);
+            queue.willClaim(first, second);
+            List<Integer> claimsSeenAtDelivery = new ArrayList<>();
+            NotificationChannelSender observing =
+                    new RecordingSender(Channel.LOG, new DispatchOutcome.Success(null)) {
+                        @Override
+                        public DispatchOutcome send(Notification notification) {
+                            claimsSeenAtDelivery.add(events.claimedCalls.size());
+                            return super.send(notification);
+                        }
+                    };
+
+            new DispatchNotificationsService(
+                            queue,
+                            Map.of(Channel.LOG, observing),
+                            events,
+                            clock,
+                            policy(),
+                            Runnable::run,
+                            INSTANCE,
+                            25)
+                    .dispatchDue();
+
+            assertThat(events.claimedCalls)
+                    .containsExactly(first.notification(), second.notification());
+            assertThat(claimsSeenAtDelivery).containsExactly(1);
+        }
+
+        @Test
         @DisplayName("reports the recorded attempt after a successful recordAttempt")
         void reportsTheDispatchedAttempt() {
             queue.willClaim(claimed(Channel.LOG, 0));
@@ -355,7 +387,7 @@ class DispatchNotificationsServiceTest {
     }
 
     /** A channel that reports what the test told it to, and remembers what it was given. */
-    private static final class RecordingSender implements NotificationChannelSender {
+    private static class RecordingSender implements NotificationChannelSender {
 
         private final Channel channel;
         private final DispatchOutcome outcome;
@@ -378,10 +410,6 @@ class DispatchNotificationsServiceTest {
         }
     }
 
-    /**
-     * A sender that always throws, standing in for an adapter bug or an unhandled destination
-     * error.
-     */
     private static final class ThrowingSender implements NotificationChannelSender {
 
         private final Channel channel;
@@ -403,12 +431,17 @@ class DispatchNotificationsServiceTest {
         }
     }
 
-    /** What deliver reported, so the assertions can look at it without a mocking framework. */
     private static final class RecordingEvents implements DispatchEvents {
 
+        private final List<Notification> claimedCalls = new ArrayList<>();
         private final List<DispatchedCall> dispatchedCalls = new ArrayList<>();
         private final List<ClaimLostCall> claimLostCalls = new ArrayList<>();
         private final List<FailedCall> failedCalls = new ArrayList<>();
+
+        @Override
+        public void claimed(Notification notification) {
+            claimedCalls.add(notification);
+        }
 
         @Override
         public void dispatched(Notification notification, NotificationAttempt attempt) {
