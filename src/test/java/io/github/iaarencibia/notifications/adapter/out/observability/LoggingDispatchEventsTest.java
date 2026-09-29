@@ -23,10 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
-/**
- * What each dispatch outcome becomes in the log, since the assertion is the line itself, not a
- * method returning normally.
- */
+/** What each dispatch outcome becomes in the log. */
 class LoggingDispatchEventsTest {
 
     private final LoggingDispatchEvents events = new LoggingDispatchEvents();

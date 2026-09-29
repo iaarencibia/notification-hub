@@ -114,7 +114,6 @@ class DispatchWiringTest {
         }
     }
 
-    /** This test only checks what reaches the queue; nothing here asserts on events. */
     private static final class NoOpEvents implements DispatchEvents {
 
         @Override

@@ -26,7 +26,6 @@ final class LoggingDispatchEvents implements DispatchEvents {
 
     @Override
     public void claimLost(Notification notification, ClaimLostException cause) {
-        // Expected: the reaper already released this claim, so the write was refused as stale.
         log.atInfo()
                 .addKeyValue("notificationId", notification.id())
                 .setMessage(
@@ -39,7 +38,6 @@ final class LoggingDispatchEvents implements DispatchEvents {
 
     @Override
     public void failed(Notification notification, RuntimeException cause) {
-        // The row stays claimed until the reaper releases it; an operator needs to know that.
         log.atError()
                 .addKeyValue("notificationId", notification.id())
                 .setCause(cause)

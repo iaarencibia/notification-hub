@@ -378,10 +378,6 @@ class DispatchNotificationsServiceTest {
         }
     }
 
-    /**
-     * A sender that always throws, standing in for an adapter bug or an unhandled destination
-     * error.
-     */
     private static final class ThrowingSender implements NotificationChannelSender {
 
         private final Channel channel;
@@ -403,7 +399,6 @@ class DispatchNotificationsServiceTest {
         }
     }
 
-    /** What deliver reported, so the assertions can look at it without a mocking framework. */
     private static final class RecordingEvents implements DispatchEvents {
 
         private final List<DispatchedCall> dispatchedCalls = new ArrayList<>();

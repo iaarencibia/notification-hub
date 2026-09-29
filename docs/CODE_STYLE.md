@@ -31,7 +31,8 @@ rules and contracts that cannot be inferred from the code.
    contract of the application layer. Each layer's `package-info.java` states the
    dependency rule of that layer and stays.
 4. **Do not add Javadoc to every method.** Private methods, trivial getters, setters,
-   constructors and self-explanatory methods need none.
+   constructors and self-explanatory methods need none. Neither do test doubles, test helpers
+   and nested test classes: their name is the documentation.
 5. **Use `//` comments only to explain** a decision, a non-obvious business rule, a technical
    constraint or workaround, or a performance, concurrency, security or integration concern.
    Keep them to three lines at most; anything longer is an ADR.
