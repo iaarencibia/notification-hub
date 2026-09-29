@@ -8,9 +8,12 @@ import jakarta.validation.Valid;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,6 +37,8 @@ class NotificationController {
     static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
 
+    private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
+
     private final SubmitNotificationUseCase submitNotification;
 
     NotificationController(SubmitNotificationUseCase submitNotification) {
@@ -51,12 +56,15 @@ class NotificationController {
     ResponseEntity<SubmitNotificationResponse> submit(
             @Valid @RequestBody SubmitNotificationRequest request,
             @RequestHeader(name = CORRELATION_ID_HEADER, required = false) String correlationHeader,
-            @RequestHeader(name = IDEMPOTENCY_KEY_HEADER, required = false) String keyHeader) {
+            @RequestHeader(name = IDEMPOTENCY_KEY_HEADER, required = false) String keyHeader,
+            @RequestAttribute(name = CorrelationIdFilter.REQUEST_ATTRIBUTE, required = false)
+                    CorrelationId filterCorrelationId) {
 
         // Both headers are read before either refusal is raised, so a caller that got two wrong
         // hears about both at once instead of round-tripping twice.
         Map<String, String> refusals = new TreeMap<>();
-        CorrelationId correlationId = correlationId(correlationHeader, refusals);
+        CorrelationId correlationId =
+                correlationId(correlationHeader, filterCorrelationId, refusals);
         String key = idempotencyKey(keyHeader, refusals);
         if (!refusals.isEmpty()) {
             throw new InvalidRequestException(refusals);
@@ -65,6 +73,14 @@ class NotificationController {
         UUID id =
                 submitNotification.submit(
                         new SubmitNotificationCommand(request.toPayload(), correlationId, key));
+
+        log.atInfo()
+                .addKeyValue("notificationId", id)
+                .addKeyValue("correlationId", correlationId.value())
+                .addKeyValue("channel", request.channel())
+                .addKeyValue("priority", request.priority())
+                .setMessage("notification accepted")
+                .log();
 
         // The correlation identifier is not echoed: the response carries the notification's own
         // id, and the header exists to group several notifications of one operation, a grouping
@@ -75,10 +91,10 @@ class NotificationController {
     // The reasons are worded here rather than forwarded from the domain: the domain explains
     // itself to a Java caller with a bad argument, this to someone holding an HTTP client. Only
     // the limits are shared, because those must not drift.
-    private static CorrelationId correlationId(String header, Map<String, String> refusals) {
+    private static CorrelationId correlationId(
+            String header, CorrelationId fromFilter, Map<String, String> refusals) {
         if (header == null) {
-            // The column is NOT NULL, and a grouping with holes in it groups nothing.
-            return CorrelationId.generate();
+            return fromFilter;
         }
         try {
             return new CorrelationId(header);
