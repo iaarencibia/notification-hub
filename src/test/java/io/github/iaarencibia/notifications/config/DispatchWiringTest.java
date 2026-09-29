@@ -56,7 +56,7 @@ class DispatchWiringTest {
         config.dispatchDueNotificationsUseCase(
                         queue,
                         Map.of(),
-                        new NoOpEvents(),
+                        List.of(new NoOpEvents()),
                         () -> Instant.EPOCH,
                         new RetryPolicy(Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                         Runnable::run,

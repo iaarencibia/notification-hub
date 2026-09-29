@@ -1,5 +1,6 @@
 package io.github.iaarencibia.notifications.config;
 
+import io.github.iaarencibia.notifications.adapter.out.observability.CompositeDispatchEvents;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
@@ -65,7 +66,7 @@ class UseCaseConfig {
     DispatchDueNotificationsUseCase dispatchDueNotificationsUseCase(
             NotificationDispatchQueue queue,
             Map<Channel, NotificationChannelSender> senders,
-            DispatchEvents events,
+            List<DispatchEvents> events,
             SystemClock clock,
             RetryPolicy retryPolicy,
             @Qualifier(DISPATCH_WORKERS) Executor workers,
@@ -73,7 +74,7 @@ class UseCaseConfig {
         return new DispatchNotificationsService(
                 queue,
                 senders,
-                events,
+                new CompositeDispatchEvents(events),
                 clock,
                 retryPolicy,
                 workers,
