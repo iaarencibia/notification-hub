@@ -3,6 +3,7 @@ package io.github.iaarencibia.notifications.adapter.in.scheduler;
 import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.function.IntSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,14 +38,17 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
     private final DispatchDueNotificationsUseCase dispatchDueNotifications;
     private final ReleaseAbandonedClaimsUseCase releaseAbandonedClaims;
     private final NotificationsProperties properties;
+    private final MeterRegistry registry;
 
     DispatchSchedulerConfig(
             DispatchDueNotificationsUseCase dispatchDueNotifications,
             ReleaseAbandonedClaimsUseCase releaseAbandonedClaims,
-            NotificationsProperties properties) {
+            NotificationsProperties properties,
+            MeterRegistry registry) {
         this.dispatchDueNotifications = dispatchDueNotifications;
         this.releaseAbandonedClaims = releaseAbandonedClaims;
         this.properties = properties;
+        this.registry = registry;
     }
 
     @Override
@@ -60,6 +64,7 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
     private void recoverAbandonedWork() {
         int released = run("reaper", releaseAbandonedClaims::releaseAbandonedClaims);
         if (released > 0) {
+            registry.counter("notifications.claims.released").increment(released);
             // Worth a line of its own: on a healthy system this never fires, so when it does it
             // says an instance died mid-delivery and those notifications may be delivered twice.
             log.warn("released {} abandoned claims", released);
