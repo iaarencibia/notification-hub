@@ -23,6 +23,7 @@
         <spotless.version>3.10.0</spotless.version>
         <google-java-format.version>1.36.1</google-java-format.version>
         <wiremock.version>3.13.2</wiremock.version>
+        <archunit.version>1.5.1</archunit.version>
         <!--
           Lets `-DskipUnitTests` mean what it says when only the integration tests are wanted.
           Maven's own switch for this is maven.test.skip.exec, which is neither obvious nor
@@ -129,6 +130,14 @@
             <groupId>org.wiremock</groupId>
             <artifactId>wiremock-standalone</artifactId>
             <version>${wiremock.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Enforces the layer dependency rules each package-info states -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
