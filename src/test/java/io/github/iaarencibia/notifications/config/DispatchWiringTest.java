@@ -3,8 +3,11 @@ package io.github.iaarencibia.notifications.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
+import io.github.iaarencibia.notifications.application.port.out.ClaimLostException;
 import io.github.iaarencibia.notifications.application.port.out.ClaimedNotification;
+import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
+import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.RetryPolicy;
 import java.time.Duration;
@@ -53,6 +56,7 @@ class DispatchWiringTest {
         config.dispatchDueNotificationsUseCase(
                         queue,
                         Map.of(),
+                        new NoOpEvents(),
                         () -> Instant.EPOCH,
                         new RetryPolicy(Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                         Runnable::run,
@@ -108,5 +112,18 @@ class DispatchWiringTest {
             this.releasedOlderThan = staleAfter;
             return 0;
         }
+    }
+
+    /** This test only checks what reaches the queue; nothing here asserts on events. */
+    private static final class NoOpEvents implements DispatchEvents {
+
+        @Override
+        public void dispatched(Notification notification, NotificationAttempt attempt) {}
+
+        @Override
+        public void claimLost(Notification notification, ClaimLostException cause) {}
+
+        @Override
+        public void failed(Notification notification, RuntimeException cause) {}
     }
 }
