@@ -117,6 +117,9 @@ class DispatchWiringTest {
     private static final class NoOpEvents implements DispatchEvents {
 
         @Override
+        public void claimed(Notification notification) {}
+
+        @Override
         public void dispatched(Notification notification, NotificationAttempt attempt) {}
 
         @Override

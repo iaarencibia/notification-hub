@@ -64,6 +64,7 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
     public int dispatchDue() {
         List<ClaimedNotification> claimed = queue.claimDue(batchSize, instanceId);
         for (ClaimedNotification each : claimed) {
+            events.claimed(each.notification());
             deliveries.execute(() -> deliver(each));
         }
         return claimed.size();

@@ -13,6 +13,7 @@ import io.github.iaarencibia.notifications.domain.CorrelationId;
 import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
+import io.github.iaarencibia.notifications.domain.NotificationStatus;
 import io.github.iaarencibia.notifications.domain.Priority;
 import java.time.Instant;
 import java.util.Map;
@@ -45,7 +46,8 @@ class LoggingDispatchEventsTest {
     }
 
     @Test
-    @DisplayName("logs a successful dispatch at DEBUG, with the notification, channel and outcome")
+    @DisplayName(
+            "logs a successful dispatch at DEBUG, with the ids, channel and what the attempt did")
     void logsADispatchAtDebug() {
         Notification notification = notification();
         NotificationAttempt attempt = attempt(notification);
@@ -57,6 +59,53 @@ class LoggingDispatchEventsTest {
         assertThat(event.getFormattedMessage()).contains(notification.id().toString());
         assertThat(fieldsOf(event)).containsEntry("channel", Channel.SERVICE);
         assertThat(fieldsOf(event)).containsEntry("outcome", AttemptOutcome.SUCCESS);
+        assertThat(fieldsOf(event)).containsEntry("notificationId", notification.id());
+        assertThat(fieldsOf(event)).containsEntry("correlationId", "order-4471");
+        assertThat(fieldsOf(event)).containsEntry("attempt", 1);
+        assertThat(fieldsOf(event)).containsEntry("responseCode", 200);
+        assertThat(fieldsOf(event)).containsEntry("durationMs", 1500L);
+        assertThat(fieldsOf(event)).containsEntry("status", notification.status());
+    }
+
+    @Test
+    @DisplayName("names the next attempt when the dispatch left one scheduled")
+    void logsTheNextAttemptWhenRescheduled() {
+        Notification notification = notification(NotificationStatus.PENDING);
+
+        events.dispatched(notification, attempt(notification));
+
+        assertThat(fieldsOf(captured.list.getFirst()))
+                .containsEntry("nextAttemptAt", notification.nextAttemptAt());
+    }
+
+    @Test
+    @DisplayName("omits the next attempt once the notification is settled")
+    void omitsTheNextAttemptWhenSettled() {
+        for (NotificationStatus settled :
+                new NotificationStatus[] {NotificationStatus.SENT, NotificationStatus.FAILED}) {
+            Notification notification = notification(settled);
+
+            events.dispatched(notification, attempt(notification));
+
+            assertThat(fieldsOf(captured.list.getLast()))
+                    .as("a %s notification has no next attempt", settled)
+                    .doesNotContainKey("nextAttemptAt");
+        }
+    }
+
+    @Test
+    @DisplayName("logs a claim at DEBUG, with the ids and the instance that owns the row")
+    void logsAClaimAtDebug() {
+        Notification notification = claimedNotification();
+
+        events.claimed(notification);
+
+        ILoggingEvent event = captured.list.getFirst();
+        assertThat(event.getLevel()).isEqualTo(Level.DEBUG);
+        assertThat(event.getFormattedMessage()).isEqualTo("notification claimed");
+        assertThat(fieldsOf(event)).containsEntry("notificationId", notification.id());
+        assertThat(fieldsOf(event)).containsEntry("correlationId", "order-4471");
+        assertThat(fieldsOf(event)).containsEntry("claimedBy", "notification-service-1");
     }
 
     @Test
@@ -71,6 +120,7 @@ class LoggingDispatchEventsTest {
         assertThat(event.getLevel()).isEqualTo(Level.INFO);
         assertThat(event.getFormattedMessage()).contains(notification.id().toString());
         assertThat(event.getFormattedMessage()).contains(cause.getMessage());
+        assertThat(fieldsOf(event)).containsEntry("correlationId", "order-4471");
     }
 
     @Test
@@ -88,6 +138,7 @@ class LoggingDispatchEventsTest {
                 .as("an operator needs to know the row stays claimed")
                 .contains("reaper");
         assertThat(event.getThrowableProxy().getMessage()).isEqualTo("boom");
+        assertThat(fieldsOf(event)).containsEntry("correlationId", "order-4471");
     }
 
     private static Map<String, Object> fieldsOf(ILoggingEvent event) {
@@ -96,7 +147,7 @@ class LoggingDispatchEventsTest {
     }
 
     private static NotificationAttempt attempt(Notification notification) {
-        Instant now = Instant.now();
+        Instant start = Instant.now();
         return new NotificationAttempt(
                 UUID.randomUUID(),
                 notification.id(),
@@ -105,8 +156,58 @@ class LoggingDispatchEventsTest {
                 AttemptOutcome.SUCCESS,
                 200,
                 null,
+                start,
+                start.plusMillis(1500));
+    }
+
+    private static Notification notification(NotificationStatus after) {
+        Instant now = Instant.now();
+        return Notification.rehydrate(
+                UUID.randomUUID(),
+                new NotificationPayload(
+                        "someone@example.test",
+                        Channel.SERVICE,
+                        "Your order shipped",
+                        "It is on its way.",
+                        Priority.HIGH,
+                        Map.of()),
+                after,
+                1,
+                3,
+                now.plusSeconds(30),
+                after == NotificationStatus.SENT ? null : "boom",
+                null,
+                null,
+                new CorrelationId("order-4471"),
+                null,
                 now,
-                now);
+                now,
+                after == NotificationStatus.SENT ? now : null);
+    }
+
+    private static Notification claimedNotification() {
+        Instant now = Instant.now();
+        return Notification.rehydrate(
+                UUID.randomUUID(),
+                new NotificationPayload(
+                        "someone@example.test",
+                        Channel.SERVICE,
+                        "Your order shipped",
+                        "It is on its way.",
+                        Priority.HIGH,
+                        Map.of()),
+                NotificationStatus.DISPATCHING,
+                0,
+                3,
+                now,
+                null,
+                now,
+                "notification-service-1",
+                new CorrelationId("order-4471"),
+                null,
+                now,
+                now,
+                null);
     }
 
     private static Notification notification() {
