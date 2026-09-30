@@ -8,6 +8,7 @@ import io.github.iaarencibia.notifications.application.port.in.UnacceptableRecip
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
 import io.github.iaarencibia.notifications.domain.Channel;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -21,6 +22,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -30,9 +32,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 /**
  * Turns everything that can go wrong inside the dispatcher servlet into a problem detail.
  *
- * <p>The second of two producers of these responses: the authentication entry point answers
- * refusals in the filter chain, before a request reaches a controller, so it cannot go through this
- * advice. A test compares both for the same shape.
+ * <p>The authentication entry point hands over the refusals born in the filter chain, before a
+ * request reaches a controller, so they are answered here too.
  *
  * <p>Extending Spring's own handler means the rest of the surface -- wrong method, wrong media
  * type, missing parameter -- arrives in that shape too, not only the cases named here.
@@ -41,6 +42,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    private static final String API_KEY_SCHEME = "ApiKey";
 
     private final DeliverableChannels deliverableChannels;
 
@@ -163,6 +166,27 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
+    /**
+     * The wording is the same whether the credential was absent or simply wrong, so a caller
+     * guessing keys cannot learn from the response which half it got right.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ProblemDetail> handleAuthentication() {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.UNAUTHORIZED,
+                        "A valid credential using the "
+                                + API_KEY_SCHEME
+                                + " scheme is required in the Authorization header");
+        // RFC 9110 requires a 401 to carry a challenge; naming the scheme is also the only way a
+        // caller learns what to send.
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header(
+                        HttpHeaders.WWW_AUTHENTICATE,
+                        API_KEY_SCHEME + " realm=\"notification-service\"")
+                .body(problem);
+    }
+
     @ExceptionHandler(IdempotencyKeyReusedException.class)
     ProblemDetail handleIdempotencyKeyReused(IdempotencyKeyReusedException exception) {
         ProblemDetail problem =
@@ -211,7 +235,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         }
         if (expected != null && expected.isEnum()) {
             String allowed =
-                    java.util.Arrays.stream(expected.getEnumConstants())
+                    Arrays.stream(expected.getEnumConstants())
                             .map(String::valueOf)
                             .collect(Collectors.joining(", "));
             return "must be one of " + allowed;
