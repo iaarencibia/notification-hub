@@ -1,6 +1,7 @@
 package io.github.iaarencibia.notifications.application.service;
 
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
+import io.github.iaarencibia.notifications.application.port.in.IdempotencyKeyReusedException;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationCommand;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
@@ -71,12 +72,18 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
             events.accepted(notification);
             return notification.id();
         } catch (IdempotencyKeyAlreadyUsedException alreadyUsed) {
-            // Not a failure: the caller gets back the identifier its first attempt created.
-            return repository
-                    .findByIdempotencyKey(alreadyUsed.idempotencyKey())
-                    .map(Notification::id)
-                    // A taken key with no row behind it is corruption, not a race.
-                    .orElseThrow(() -> alreadyUsed);
+            // A repeat of the same payload is not a failure: the caller gets its first identifier
+            // back.
+            Notification existing =
+                    repository
+                            .findByIdempotencyKey(alreadyUsed.idempotencyKey())
+                            // A taken key with no row behind it is corruption, not a race.
+                            .orElseThrow(() -> alreadyUsed);
+            if (!existing.payload().equals(command.payload())) {
+                throw new IdempotencyKeyReusedException(
+                        alreadyUsed.idempotencyKey(), existing.id());
+            }
+            return existing.id();
         }
     }
 }
