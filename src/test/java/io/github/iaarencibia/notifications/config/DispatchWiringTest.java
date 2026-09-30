@@ -55,12 +55,12 @@ class DispatchWiringTest {
     void wiresTheBatchSizeAndInstanceId() {
         config.dispatchDueNotificationsUseCase(
                         queue,
-                        Map.of(),
+                        properties(),
                         List.of(new NoOpEvents()),
-                        () -> Instant.EPOCH,
-                        new RetryPolicy(Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                         Runnable::run,
-                        properties())
+                        () -> Instant.EPOCH,
+                        Map.of(),
+                        new RetryPolicy(Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2))
                 .dispatchDue();
 
         assertThat(queue.batchSize).isEqualTo(BATCH_SIZE);

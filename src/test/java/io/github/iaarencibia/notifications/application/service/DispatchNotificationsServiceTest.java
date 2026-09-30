@@ -187,13 +187,13 @@ class DispatchNotificationsServiceTest {
 
         new DispatchNotificationsService(
                         queue,
-                        Map.of(Channel.LOG, log, Channel.SERVICE, service),
-                        events,
-                        clock,
-                        policy(),
-                        Runnable::run,
+                        25,
                         INSTANCE,
-                        25)
+                        events,
+                        Runnable::run,
+                        clock,
+                        Map.of(Channel.LOG, log, Channel.SERVICE, service),
+                        policy())
                 .dispatchDue();
 
         assertThat(service.sent).hasSize(1);
@@ -222,13 +222,13 @@ class DispatchNotificationsServiceTest {
 
             new DispatchNotificationsService(
                             queue,
-                            Map.of(Channel.LOG, observing),
-                            events,
-                            clock,
-                            policy(),
-                            Runnable::run,
+                            25,
                             INSTANCE,
-                            25)
+                            events,
+                            Runnable::run,
+                            clock,
+                            Map.of(Channel.LOG, observing),
+                            policy())
                     .dispatchDue();
 
             assertThat(events.claimedCalls)
@@ -272,13 +272,13 @@ class DispatchNotificationsServiceTest {
             int dispatched =
                     new DispatchNotificationsService(
                                     queue,
-                                    Map.of(Channel.LOG, new ThrowingSender(Channel.LOG, boom)),
-                                    events,
-                                    clock,
-                                    policy(),
-                                    Runnable::run,
+                                    25,
                                     INSTANCE,
-                                    25)
+                                    events,
+                                    Runnable::run,
+                                    clock,
+                                    Map.of(Channel.LOG, new ThrowingSender(Channel.LOG, boom)),
+                                    policy())
                             .dispatchDue();
 
             assertThat(dispatched).isEqualTo(1);
@@ -290,17 +290,17 @@ class DispatchNotificationsServiceTest {
     private DispatchNotificationsService serviceDelivering(DispatchOutcome outcome) {
         return new DispatchNotificationsService(
                 queue,
+                25,
+                INSTANCE,
+                events,
+                Runnable::run,
+                clock,
                 Map.of(
                         Channel.LOG,
                         new RecordingSender(Channel.LOG, outcome),
                         Channel.SERVICE,
                         new RecordingSender(Channel.SERVICE, outcome)),
-                events,
-                clock,
-                policy(),
-                Runnable::run,
-                INSTANCE,
-                25);
+                policy());
     }
 
     /** Jitter at zero so the scheduled delay is exact rather than a range. */
