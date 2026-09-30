@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -29,6 +30,8 @@ import org.springframework.web.client.RestClient;
  *       produce an identical refusal.
  *   <li><strong>429</strong> -- a 4xx by number and transient in meaning: the destination is asking
  *       for less traffic, and its {@code Retry-After} hint is honoured.
+ *   <li><strong>a private or local address</strong> -- never contacted. Permanent when the
+ *       recipient names one; retryable when a name resolves to one, as the next lookup may not.
  * </ul>
  *
  * <p>Nothing here retries or sleeps: how many attempts a notification gets belongs to the
@@ -43,9 +46,11 @@ class HttpServiceChannelSender implements NotificationChannelSender {
     static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
 
     private final RestClient restClient;
+    private final ServiceDestinationPolicy policy;
 
-    HttpServiceChannelSender(RestClient restClient) {
+    HttpServiceChannelSender(RestClient restClient, ServiceDestinationPolicy policy) {
         this.restClient = restClient;
+        this.policy = policy;
     }
 
     @Override
@@ -66,9 +71,9 @@ class HttpServiceChannelSender implements NotificationChannelSender {
         // Parsing is not enough: "example.com/hook" is a legal relative URI, and other shapes
         // parse with no HTTP call buildable from them. Each is permanent: the recipient is
         // stored on the row and no retry rewrites it.
-        String unusable = whyUnusable(destination);
-        if (unusable != null) {
-            return new DispatchOutcome.PermanentFailure(null, unusable);
+        Optional<String> refusal = policy.refuseBeforeConnecting(destination);
+        if (refusal.isPresent()) {
+            return new DispatchOutcome.PermanentFailure(null, refusal.get());
         }
 
         try {
@@ -85,7 +90,12 @@ class HttpServiceChannelSender implements NotificationChannelSender {
         } catch (ResourceAccessException unreachable) {
             // Connect timeout, read timeout, refused connection, unresolved name: no answer
             // arrived, so there is no status to record, and each is worth trying again.
-            return new DispatchOutcome.RetryableFailure(null, describe(unreachable), null);
+            return new DispatchOutcome.RetryableFailure(
+                    null,
+                    refusedAddressIn(unreachable)
+                            .map(Throwable::getMessage)
+                            .orElseGet(() -> describe(unreachable)),
+                    null);
         } catch (RuntimeException refused) {
             // The backstop: this port promises never to throw, and the checks above can only
             // cover shapes already thought of -- twice now a recipient got past them and blew
@@ -94,28 +104,6 @@ class HttpServiceChannelSender implements NotificationChannelSender {
                     null,
                     "recipient cannot be reached as an HTTP destination -- " + describe(refused));
         }
-    }
-
-    /**
-     * @param destination the parsed recipient
-     * @return why no HTTP request can be built from it, or {@code null} when one can
-     */
-    private static String whyUnusable(URI destination) {
-        if (!destination.isAbsolute()) {
-            return "recipient must be an absolute URL, and this one names no scheme";
-        }
-        if (!isHttp(destination.getScheme())) {
-            return "recipient must use http or https, and this one uses " + destination.getScheme();
-        }
-        if (destination.getHost() == null || destination.getHost().isBlank()) {
-            return "recipient names no host";
-        }
-        // -1 is "no port given", which is legal and means the scheme's default.
-        if (destination.getPort() != -1
-                && (destination.getPort() < 1 || destination.getPort() > 65535)) {
-            return "recipient names a port outside the legal range: " + destination.getPort();
-        }
-        return null;
     }
 
     /**
@@ -182,12 +170,13 @@ class HttpServiceChannelSender implements NotificationChannelSender {
         }
     }
 
-    /**
-     * @param scheme the scheme of the destination, never null here because the URI is absolute
-     * @return whether this channel speaks it
-     */
-    private static boolean isHttp(String scheme) {
-        return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
+    private static Optional<Throwable> refusedAddressIn(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof VettingDnsResolver.RefusedAddressException) {
+                return Optional.of(cause);
+            }
+        }
+        return Optional.empty();
     }
 
     /**

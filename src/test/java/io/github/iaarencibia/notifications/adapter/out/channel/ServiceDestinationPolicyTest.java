@@ -3,6 +3,7 @@ package io.github.iaarencibia.notifications.adapter.out.channel;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.iaarencibia.notifications.domain.Channel;
+import java.net.URI;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -154,5 +155,68 @@ class ServiceDestinationPolicyTest {
     void ignoresOtherChannels(Channel channel) {
         assertThat(policy.refuse(channel, "ops-team")).isEmpty();
         assertThat(policy.refuse(channel, "http://127.0.0.1/hook")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "http://127.0.0.1/hook",
+                "http://2130706433/hook",
+                "http://[::1]/hook",
+                "http://localhost:8080/hook",
+                "http://api.localhost./hook"
+            })
+    @DisplayName(
+            "refuses before connecting a local literal or name, which no resolution can change")
+    void refusesLocalDestinationsBeforeConnecting(String recipient) {
+        assertThat(policy.refuseBeforeConnecting(URI.create(recipient)))
+                .hasValueSatisfying(reason -> assertThat(reason).contains("local address"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://127.1/hook", "http://0x7f.1/hook"})
+    @DisplayName("refuses before connecting a shorthand loopback because URI reads it as no host")
+    void refusesShorthandLoopbackAsHostless(String recipient) {
+        URI destination = URI.create(recipient);
+
+        assertThat(destination.getHost()).isNull();
+        assertThat(policy.refuseBeforeConnecting(destination)).contains("recipient names no host");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "example.com/hook",
+                "ftp://destination.test/hook",
+                "http://user:pw@destination.test/hook",
+                "http://destination.test:70000/hook"
+            })
+    @DisplayName("refuses before connecting what is not an http URL to a host")
+    void refusesTheWrongFormBeforeConnecting(String recipient) {
+        assertThat(policy.refuseBeforeConnecting(URI.create(recipient))).isPresent();
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "https://8.8.8.8/hook",
+                "http://[2001:4860:4860::8888]/hook",
+                "https://example.com/hook",
+                "http://no-such-host.invalid/hook"
+            })
+    @DisplayName("leaves a public literal or a name to the resolution that connecting performs")
+    void leavesPublicDestinationsToTheResolver(String recipient) {
+        assertThat(policy.refuseBeforeConnecting(URI.create(recipient))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("does not refuse before connecting an allow-listed local literal or name")
+    void doesNotRefuseAnAllowedLocalDestinationBeforeConnecting() {
+        ServiceDestinationPolicy allowing =
+                ServiceDestinationPolicies.allowing("localhost", "10.0.0.5");
+
+        assertThat(allowing.refuseBeforeConnecting(URI.create("http://localhost:8080/hook")))
+                .isEmpty();
+        assertThat(allowing.refuseBeforeConnecting(URI.create("http://10.0.0.5/hook"))).isEmpty();
     }
 }

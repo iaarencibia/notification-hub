@@ -262,8 +262,11 @@ class HttpServiceChannelSenderTest {
                 "foo://host/path",
                 "http://example.com:99999/hook", // absolute http, port past the legal range
                 "http://example.com:-5/hook", // absolute http, port that is not a port
-                "http:///hook"
-            }) // absolute http, no host to reach
+                "http:///hook", // absolute http, no host to reach
+                "http://user:pw@example.com/hook",
+                "http://127.1/hook",
+                "http://0x7f.1/hook"
+            })
     @DisplayName("answers, never throws, for a recipient no HTTP call can be built from")
     void neverThrowsForAnUnusableRecipient(String recipient) {
         // The port promises a failed delivery is an outcome, not an exception -- and this is
@@ -276,6 +279,52 @@ class HttpServiceChannelSenderTest {
                 .isInstanceOf(DispatchOutcome.PermanentFailure.class);
         assertThat(outcome.errorMessage()).isNotBlank();
         assertThat(destination.getAllServeEvents()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("refuses permanently a local name, without resolving it or contacting it")
+    void refusesALocalNameUnresolved() {
+        destination.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200)));
+        StubDnsResolver dns = StubDnsResolver.knowingNothing();
+        HttpServiceChannelSender strict = senderOver(READ_TIMEOUT, noAllowedHosts(), dns);
+
+        DispatchOutcome outcome = strict.send(notification());
+
+        assertThat(outcome).isInstanceOf(DispatchOutcome.PermanentFailure.class);
+        assertThat(outcome.errorMessage()).isEqualTo("recipient names a local address");
+        assertThat(dns.lookups()).isEmpty();
+        assertThat(destination.getAllServeEvents()).isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "refuses permanently a private address literal, without resolving or contacting it")
+    void refusesAPrivateLiteralUnresolved() {
+        StubDnsResolver dns = StubDnsResolver.knowingNothing();
+        HttpServiceChannelSender strict = senderOver(READ_TIMEOUT, noAllowedHosts(), dns);
+
+        DispatchOutcome outcome = strict.send(notificationTo("http://10.0.0.5:8080/hook"));
+
+        assertThat(outcome).isInstanceOf(DispatchOutcome.PermanentFailure.class);
+        assertThat(outcome.errorMessage()).isEqualTo("recipient names a private or local address");
+        assertThat(dns.lookups()).isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "tries again a name that resolves to a private address, since a later lookup may not")
+    void retriesAfterAPrivateResolution() {
+        StubDnsResolver dns = StubDnsResolver.answering("hook.test", "10.0.0.5");
+        HttpServiceChannelSender strict = senderOver(READ_TIMEOUT, noAllowedHosts(), dns);
+
+        DispatchOutcome outcome = strict.send(notificationTo("http://hook.test:8080/hook"));
+
+        assertThat(outcome)
+                .isEqualTo(
+                        new DispatchOutcome.RetryableFailure(
+                                null,
+                                "recipient resolves to a private or local address (10.0.0.5)",
+                                null));
     }
 
     @Test
@@ -434,7 +483,8 @@ class HttpServiceChannelSenderTest {
                                         8,
                                         policy,
                                         dns))
-                        .build());
+                        .build(),
+                policy);
     }
 
     private static ServiceDestinationPolicy noAllowedHosts() {
