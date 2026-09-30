@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.ResourceAccessException;
@@ -20,6 +21,8 @@ import org.springframework.web.client.RestClient;
  *
  * <ul>
  *   <li><strong>2xx</strong> -- delivered.
+ *   <li><strong>3xx</strong> -- the recipient is not the final address, and no retry rewrites it;
+ *       redirects are never followed.
  *   <li><strong>5xx, a timeout, a refused connection</strong> -- the destination is unwell, not the
  *       request; retrying is what fixes it.
  *   <li><strong>4xx</strong> -- the destination understood and refused; an identical retry would
@@ -78,9 +81,7 @@ class HttpServiceChannelSender implements NotificationChannelSender {
                     .body(bodyOf(notification))
                     .exchange(
                             (request, response) ->
-                                    classify(
-                                            response.getStatusCode(),
-                                            response.getHeaders().getFirst("Retry-After")));
+                                    classify(response.getStatusCode(), response.getHeaders()));
         } catch (ResourceAccessException unreachable) {
             // Connect timeout, read timeout, refused connection, unresolved name: no answer
             // arrived, so there is no status to record, and each is worth trying again.
@@ -130,15 +131,23 @@ class HttpServiceChannelSender implements NotificationChannelSender {
                 "metadata", notification.payload().metadata());
     }
 
-    private static DispatchOutcome classify(HttpStatusCode status, String retryAfter) {
+    private static DispatchOutcome classify(HttpStatusCode status, HttpHeaders headers) {
         if (status.is2xxSuccessful()) {
             return new DispatchOutcome.Success(status.value());
+        }
+        if (status.is3xxRedirection()) {
+            String location = headers.getFirst(HttpHeaders.LOCATION);
+            return new DispatchOutcome.PermanentFailure(
+                    status.value(),
+                    "the destination redirected to "
+                            + (location == null ? "an unnamed location" : location)
+                            + "; the recipient must name the final address");
         }
         if (status.value() == 429) {
             return new DispatchOutcome.RetryableFailure(
                     status.value(),
                     "the destination asked for fewer requests",
-                    retryAfterOf(retryAfter));
+                    retryAfterOf(headers.getFirst(HttpHeaders.RETRY_AFTER)));
         }
         if (status.is4xxClientError()) {
             return new DispatchOutcome.PermanentFailure(
