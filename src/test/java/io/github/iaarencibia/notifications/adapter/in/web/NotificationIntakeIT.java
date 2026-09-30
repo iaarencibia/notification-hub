@@ -23,6 +23,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -445,6 +447,27 @@ class NotificationIntakeIT extends IntegrationTestSupport {
         assertThat(countOf("it-email"))
                 .as("a notification nothing can deliver must not be stored")
                 .isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "ftp://destination.test/hook",
+                "http://user:pw@destination.test/hook",
+                "destination.test/hook"
+            })
+    @DisplayName("refuses a SERVICE recipient that is not an http URL without credentials")
+    void refusesAServiceRecipientOfTheWrongForm(String recipient) throws Exception {
+        mockMvc.perform(
+                        submit(VALID_BODY.replace("https://destination.test/hook", recipient))
+                                .header("Idempotency-Key", "it-form"))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.errors.recipient")
+                                .value(
+                                        "must be an absolute http or https URL without credentials"));
+
+        assertThat(countOf("it-form")).isZero();
     }
 
     @Test

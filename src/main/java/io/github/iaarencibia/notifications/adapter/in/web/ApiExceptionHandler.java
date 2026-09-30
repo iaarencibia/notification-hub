@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.IdempotencyKeyReusedException;
+import io.github.iaarencibia.notifications.application.port.in.UnacceptableRecipientException;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
 import io.github.iaarencibia.notifications.domain.Channel;
 import jakarta.servlet.http.HttpServletRequest;
@@ -149,6 +150,16 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setProperty(
                 "errors",
                 Map.of("channel", "must be one of " + exception.deliverable().describe()));
+        return problem;
+    }
+
+    @ExceptionHandler(UnacceptableRecipientException.class)
+    ProblemDetail handleUnacceptableRecipient(UnacceptableRecipientException exception) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.BAD_REQUEST,
+                        "One or more fields of the request body are invalid");
+        problem.setProperty("errors", Map.of("recipient", exception.reason()));
         return problem;
     }
 

@@ -6,6 +6,7 @@ import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotifi
 import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
+import io.github.iaarencibia.notifications.application.port.out.DestinationPolicy;
 import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
@@ -47,9 +48,15 @@ class UseCaseConfig {
             SystemClock clock,
             NotificationsProperties properties,
             DeliverableChannels deliverableChannels,
-            IntakeEvents events) {
+            IntakeEvents events,
+            DestinationPolicy destinations) {
         return new SubmitNotificationService(
-                repository, clock, properties.retry().maxAttempts(), deliverableChannels, events);
+                repository,
+                clock,
+                properties.retry().maxAttempts(),
+                deliverableChannels,
+                events,
+                destinations);
     }
 
     /**

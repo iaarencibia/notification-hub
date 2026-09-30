@@ -4,7 +4,9 @@ import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.IdempotencyKeyReusedException;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationCommand;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationUseCase;
+import io.github.iaarencibia.notifications.application.port.in.UnacceptableRecipientException;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
+import io.github.iaarencibia.notifications.application.port.out.DestinationPolicy;
 import io.github.iaarencibia.notifications.application.port.out.IdempotencyKeyAlreadyUsedException;
 import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
@@ -13,6 +15,7 @@ import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.Notification;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -26,6 +29,7 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
     private final int maxAttempts;
     private final DeliverableChannels deliverableChannels;
     private final IntakeEvents events;
+    private final DestinationPolicy destinations;
 
     /**
      * @param clock the shared clock; the claim query compares against the same source
@@ -35,13 +39,15 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
             SystemClock clock,
             int maxAttempts,
             DeliverableChannels deliverableChannels,
-            IntakeEvents events) {
+            IntakeEvents events,
+            DestinationPolicy destinations) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.maxAttempts = maxAttempts;
         this.deliverableChannels =
                 Objects.requireNonNull(deliverableChannels, "deliverableChannels must not be null");
         this.events = Objects.requireNonNull(events, "events must not be null");
+        this.destinations = Objects.requireNonNull(destinations, "destinations must not be null");
     }
 
     @Override
@@ -52,6 +58,12 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
         Channel channel = command.payload().channel();
         if (!deliverableChannels.includes(channel)) {
             throw new UndeliverableChannelException(channel, deliverableChannels);
+        }
+
+        String recipient = command.payload().recipient();
+        Optional<String> refusal = destinations.refuse(channel, recipient);
+        if (refusal.isPresent()) {
+            throw new UnacceptableRecipientException(refusal.get());
         }
 
         // The shared clock: next_attempt_at is compared against the database's own now(), so an
