@@ -53,6 +53,10 @@ final class ServiceDestinationPolicy implements DestinationPolicy {
         return Optional.empty();
     }
 
+    boolean allows(String host) {
+        return isAllowed(bare(host));
+    }
+
     private static Optional<String> whyUnusable(URI destination) {
         if (!destination.isAbsolute()) {
             return Optional.of("recipient must be an absolute URL, and this one names no scheme");
@@ -118,7 +122,7 @@ final class ServiceDestinationPolicy implements DestinationPolicy {
         }
     }
 
-    private static boolean isBlocked(InetAddress address) {
+    static boolean isBlocked(InetAddress address) {
         byte[] octets = address.getAddress();
         if (octets.length == 4) {
             return isBlockedIpv4(octets);

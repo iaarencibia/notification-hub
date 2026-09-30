@@ -30,7 +30,8 @@ class ChannelConfigTest {
                 new ChannelConfig()
                         .serviceChannelRestClient(
                                 RestClient.builder(),
-                                propertiesWith(Duration.ofMillis(40), Duration.ofMillis(40)));
+                                propertiesWith(Duration.ofMillis(40), Duration.ofMillis(40)),
+                                ServiceDestinationPolicies.allowing());
 
         // A reserved, unroutable address (RFC 5737) on a port nothing serves.
         Instant started = Instant.now();
@@ -48,6 +49,33 @@ class ChannelConfigTest {
         assertThat(Duration.between(started, Instant.now()))
                 .as("the configured timeout is what must end this call, not the operating system")
                 .isLessThan(Duration.ofSeconds(5));
+    }
+
+    @Test
+    @DisplayName("resolves an address literal through the vetting resolver as well")
+    void anAddressLiteralIsResolvedThroughTheResolver() {
+        StubDnsResolver dns = StubDnsResolver.knowingNothing();
+        RestClient client =
+                RestClient.builder()
+                        .requestFactory(
+                                ChannelConfig.requestFactoryFor(
+                                        propertiesWith(Duration.ofMillis(40), Duration.ofMillis(40))
+                                                .channels()
+                                                .service(),
+                                        8,
+                                        ServiceDestinationPolicies.allowing(),
+                                        dns))
+                        .build();
+
+        assertThatExceptionOfType(ResourceAccessException.class)
+                .isThrownBy(
+                        () ->
+                                client.post()
+                                        .uri("http://203.0.113.7:9/hook")
+                                        .retrieve()
+                                        .toBodilessEntity());
+
+        assertThat(dns.lookups()).containsExactly("203.0.113.7");
     }
 
     @Test
@@ -82,7 +110,7 @@ class ChannelConfigTest {
     /** The channel configuration with the two beans Boot would otherwise supply it. */
     private static ApplicationContextRunner channelContext() {
         return new ApplicationContextRunner()
-                .withUserConfiguration(ChannelConfig.class)
+                .withUserConfiguration(ChannelConfig.class, ServiceDestinationPolicy.class)
                 .withBean(RestClient.Builder.class, RestClient::builder)
                 .withBean(
                         NotificationsProperties.class,
