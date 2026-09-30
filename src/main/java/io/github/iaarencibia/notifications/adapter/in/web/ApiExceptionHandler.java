@@ -3,6 +3,7 @@ package io.github.iaarencibia.notifications.adapter.in.web;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
+import io.github.iaarencibia.notifications.application.port.in.IdempotencyKeyReusedException;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
 import io.github.iaarencibia.notifications.domain.Channel;
 import jakarta.servlet.http.HttpServletRequest;
@@ -148,6 +149,17 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setProperty(
                 "errors",
                 Map.of("channel", "must be one of " + exception.deliverable().describe()));
+        return problem;
+    }
+
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    ProblemDetail handleIdempotencyKeyReused(IdempotencyKeyReusedException exception) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "The Idempotency-Key was already used for a different notification");
+        problem.setProperty("idempotencyKey", exception.idempotencyKey());
+        problem.setProperty("notificationId", exception.existingId().toString());
         return problem;
     }
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
+import io.github.iaarencibia.notifications.application.port.in.IdempotencyKeyReusedException;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationCommand;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
 import io.github.iaarencibia.notifications.application.port.out.IdempotencyKeyAlreadyUsedException;
@@ -187,6 +188,54 @@ class SubmitNotificationServiceTest {
         service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
         service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
 
+        assertThat(repository.stored()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName(
+            "refuses a repeated key carrying a different payload, naming the first notification")
+    void refusesARepeatedKeyWithADifferentPayload() {
+        UUID first =
+                service.submit(
+                        new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-conflict"));
+        NotificationPayload other =
+                new NotificationPayload(
+                        "https://destination.test/hook",
+                        Channel.SERVICE,
+                        "Your order was cancelled",
+                        "It is on its way.",
+                        Priority.HIGH,
+                        Map.of("orderId", "4471"));
+
+        assertThatExceptionOfType(IdempotencyKeyReusedException.class)
+                .isThrownBy(
+                        () ->
+                                service.submit(
+                                        new SubmitNotificationCommand(
+                                                other, CORRELATION_ID, "key-conflict")))
+                .satisfies(
+                        thrown -> {
+                            assertThat(thrown.idempotencyKey()).isEqualTo("key-conflict");
+                            assertThat(thrown.existingId()).isEqualTo(first);
+                        });
+
+        assertThat(repository.stored()).hasSize(1);
+        assertThat(events.accepted).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("still answers a repeated key with the same payload under another correlation id")
+    void answersARepeatedKeyUnderAnotherCorrelationId() {
+        UUID first =
+                service.submit(
+                        new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
+
+        UUID second =
+                service.submit(
+                        new SubmitNotificationCommand(
+                                payload(), new CorrelationId("order-9000"), "key-repeated"));
+
+        assertThat(second).isEqualTo(first);
         assertThat(repository.stored()).hasSize(1);
     }
 
