@@ -2,11 +2,17 @@ package io.github.iaarencibia.notifications.adapter.out.channel;
 
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -38,7 +44,11 @@ class ChannelConfig {
         // Boot's builder, not RestClient.builder(): the static factory skips every customizer,
         // including the one that instruments the call -- and this is the only call whose latency
         // the resilience requirement is about.
-        return builder.requestFactory(requestFactoryFor(properties.channels().service())).build();
+        return builder.requestFactory(
+                        requestFactoryFor(
+                                properties.channels().service(),
+                                properties.dispatch().workerPoolSize()))
+                .build();
     }
 
     /**
@@ -50,11 +60,31 @@ class ChannelConfig {
      * expensive failure -- is caught only by the read timeout.
      */
     static ClientHttpRequestFactory requestFactoryFor(
-            NotificationsProperties.Channels.Service service) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(service.connectTimeout());
-        requestFactory.setReadTimeout(service.readTimeout());
-        return requestFactory;
+            NotificationsProperties.Channels.Service service, int workers) {
+        ConnectionConfig connection =
+                ConnectionConfig.custom()
+                        .setConnectTimeout(Timeout.of(service.connectTimeout()))
+                        .setSocketTimeout(Timeout.of(service.readTimeout()))
+                        .build();
+        PoolingHttpClientConnectionManager connections =
+                PoolingHttpClientConnectionManagerBuilder.create()
+                        .setDefaultConnectionConfig(connection)
+                        .setMaxConnPerRoute(workers)
+                        .setMaxConnTotal(workers)
+                        .build();
+        RequestConfig request =
+                RequestConfig.custom()
+                        .setResponseTimeout(Timeout.of(service.readTimeout()))
+                        .build();
+        return new HttpComponentsClientHttpRequestFactory(
+                HttpClients.custom()
+                        .setConnectionManager(connections)
+                        .setDefaultRequestConfig(request)
+                        .disableRedirectHandling()
+                        .disableAutomaticRetries()
+                        .disableCookieManagement()
+                        .disableAuthCaching()
+                        .build());
     }
 
     /**
