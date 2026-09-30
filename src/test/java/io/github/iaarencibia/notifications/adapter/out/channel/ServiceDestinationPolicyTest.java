@@ -1,6 +1,7 @@
 package io.github.iaarencibia.notifications.adapter.out.channel;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import io.github.iaarencibia.notifications.domain.Channel;
 import java.net.URI;
@@ -70,6 +71,11 @@ class ServiceDestinationPolicyTest {
                 "http://[fd00::1]/hook",
                 "http://[fe80::1]/hook",
                 "http://[::ffff:127.0.0.1]/hook",
+                "http://[64:ff9b::a9fe:a9fe]/hook",
+                "http://[64:ff9b::7f00:1]/hook",
+                "http://[2002:a9fe:a9fe::1]/hook",
+                "http://[2002:0a00:0001::]/hook",
+                "http://[::a9fe:a9fe]/hook",
                 "http://10.0.0.5:8080/hook",
                 "HTTP://10.0.0.5/hook"
             })
@@ -108,7 +114,10 @@ class ServiceDestinationPolicyTest {
                 "https://destination.test/hook",
                 "https://notlocalhost/hook",
                 "https://localhost.example.com/hook",
-                "http://[2001:4860:4860::8888]/hook"
+                "http://[2001:4860:4860::8888]/hook",
+                "http://[64:ff9b::808:808]/hook",
+                "http://[2002:808:808::1]/hook",
+                "http://[::808:808]/hook"
             })
     @DisplayName("accepts a public address literal or a name, without resolving it")
     void acceptsPublicDestinations(String recipient) {
@@ -139,6 +148,41 @@ class ServiceDestinationPolicyTest {
     }
 
     @Test
+    @DisplayName("matches an allow-listed IPv6 literal by address, not by spelling")
+    void allowListComparesIpv6ByAddress() {
+        ServiceDestinationPolicy compressed = ServiceDestinationPolicies.allowing("::1");
+        ServiceDestinationPolicy expanded = ServiceDestinationPolicies.allowing("0:0:0:0:0:0:0:1");
+        ServiceDestinationPolicy bracketed = ServiceDestinationPolicies.allowing("[::1]");
+
+        assertThat(compressed.refuse(Channel.SERVICE, "http://[0:0:0:0:0:0:0:1]/hook")).isEmpty();
+        assertThat(expanded.refuse(Channel.SERVICE, "http://[::1]/hook")).isEmpty();
+        assertThat(bracketed.refuse(Channel.SERVICE, "http://[::1]/hook")).isEmpty();
+        assertThat(compressed.refuse(Channel.SERVICE, "http://[::2]/hook")).isPresent();
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "wiremock:8080",
+                "http://wiremock",
+                "wiremock/hook",
+                "wire mock",
+                "user@wiremock",
+                "wiremock?x",
+                "[::1",
+                "::zz",
+                "under_score",
+                "-wiremock",
+                "."
+            })
+    @DisplayName("refuses at construction an allowed host that is not a name or an address")
+    void refusesAMalformedAllowedHost(String entry) {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> ServiceDestinationPolicies.allowing("valid.test", entry))
+                .withMessageContaining("'" + entry + "'");
+    }
+
+    @Test
     @DisplayName("tolerates blank allowed hosts and whitespace around a valid one")
     void toleratesBlankAndPaddedAllowedHosts() {
         ServiceDestinationPolicy allowing =
@@ -163,6 +207,7 @@ class ServiceDestinationPolicyTest {
                 "http://127.0.0.1/hook",
                 "http://2130706433/hook",
                 "http://[::1]/hook",
+                "http://[64:ff9b::7f00:1]/hook",
                 "http://localhost:8080/hook",
                 "http://api.localhost./hook"
             })
@@ -218,5 +263,18 @@ class ServiceDestinationPolicyTest {
         assertThat(allowing.refuseBeforeConnecting(URI.create("http://localhost:8080/hook")))
                 .isEmpty();
         assertThat(allowing.refuseBeforeConnecting(URI.create("http://10.0.0.5/hook"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("allows a host by the same normalisation the allow list was built with")
+    void allowsAListedHostInAnySpelling() {
+        ServiceDestinationPolicy allowing =
+                ServiceDestinationPolicies.allowing("Hook.Test.", "0:0:0:0:0:0:0:1");
+
+        assertThat(allowing.allows("hook.test")).isTrue();
+        assertThat(allowing.allows("HOOK.TEST.")).isTrue();
+        assertThat(allowing.allows("::1")).isTrue();
+        assertThat(allowing.allows("[::1]")).isTrue();
+        assertThat(allowing.allows("other.test")).isFalse();
     }
 }
