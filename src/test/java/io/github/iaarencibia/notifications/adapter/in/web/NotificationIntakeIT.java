@@ -221,6 +221,54 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("refuses a repeated idempotency key carrying a different notification")
+    void refusesARepeatedKeyWithADifferentPayload() throws Exception {
+        String first =
+                idOf(
+                        mockMvc.perform(submit(VALID_BODY).header("Idempotency-Key", "it-conflict"))
+                                .andExpect(status().isAccepted())
+                                .andReturn());
+
+        mockMvc.perform(
+                        submit(VALID_BODY.replace("Your order shipped", "Your order was cancelled"))
+                                .header("Idempotency-Key", "it-conflict"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(
+                        jsonPath("$.detail")
+                                .value(
+                                        "The Idempotency-Key was already used for a different notification"))
+                .andExpect(jsonPath("$.idempotencyKey").value("it-conflict"))
+                .andExpect(jsonPath("$.notificationId").value(first));
+
+        assertThat(countOf("it-conflict")).isEqualTo(1);
+        assertThat(rowOf("it-conflict").get("subject")).isEqualTo("Your order shipped");
+    }
+
+    @Test
+    @DisplayName("reads a repeat whose metadata keys arrive in another order as the same payload")
+    void metadataKeyOrderDoesNotMakeARepeatDifferent() throws Exception {
+        String twoEntries =
+                VALID_BODY.replace("\"orderId\": \"4471\"", "\"a\": \"1\", \"b\": \"2\"");
+        String reordered =
+                VALID_BODY.replace("\"orderId\": \"4471\"", "\"b\": \"2\", \"a\": \"1\"");
+
+        String first =
+                idOf(
+                        mockMvc.perform(submit(twoEntries).header("Idempotency-Key", "it-order"))
+                                .andExpect(status().isAccepted())
+                                .andReturn());
+
+        String second =
+                idOf(
+                        mockMvc.perform(submit(reordered).header("Idempotency-Key", "it-order"))
+                                .andExpect(status().isAccepted())
+                                .andReturn());
+
+        assertThat(second).isEqualTo(first);
+    }
+
+    @Test
     @DisplayName("accepts two notifications of one operation, each with its own key")
     void acceptsTwoNotificationsOfTheSameOperation() throws Exception {
         // Proven through the endpoint: a correlation id is shared by every notification of an
