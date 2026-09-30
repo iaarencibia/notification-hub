@@ -113,6 +113,57 @@ class SubmitNotificationServiceTest {
     }
 
     @Test
+    @DisplayName("answers a replay with the original identifier after the policy has tightened")
+    void answersAReplayThePolicyNowRefuses() {
+        UUID first =
+                service.submit(
+                        new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-replayed"));
+        destinations.refuseWith("must not name a local address");
+
+        UUID replay =
+                service.submit(
+                        new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-replayed"));
+
+        assertThat(replay).isEqualTo(first);
+        assertThat(repository.stored()).hasSize(1);
+        assertThat(events.accepted).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("keeps refusing the key reuse when the policy also refuses the new payload")
+    void refusesKeyReuseBeforeTheRecipient() {
+        UUID first =
+                service.submit(
+                        new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-reused"));
+        destinations.refuseWith("must not name a local address");
+
+        assertThatExceptionOfType(IdempotencyKeyReusedException.class)
+                .isThrownBy(
+                        () ->
+                                service.submit(
+                                        new SubmitNotificationCommand(
+                                                payloadTo("http://localhost/hook"),
+                                                CORRELATION_ID,
+                                                "key-reused")))
+                .satisfies(thrown -> assertThat(thrown.existingId()).isEqualTo(first));
+    }
+
+    @Test
+    @DisplayName("refuses a refused recipient that carries no idempotency key")
+    void refusesARecipientWithoutAKey() {
+        destinations.refuseWith("must not name a local address");
+
+        assertThatExceptionOfType(UnacceptableRecipientException.class)
+                .isThrownBy(
+                        () ->
+                                service.submit(
+                                        new SubmitNotificationCommand(
+                                                payloadTo("http://localhost/hook"),
+                                                CORRELATION_ID,
+                                                null)));
+    }
+
+    @Test
     @DisplayName("asks the policy about the channel and recipient it was given")
     void consultsThePolicy() {
         service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-1"));

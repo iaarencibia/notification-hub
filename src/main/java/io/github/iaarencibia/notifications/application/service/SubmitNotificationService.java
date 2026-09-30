@@ -63,7 +63,8 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
         String recipient = command.payload().recipient();
         Optional<String> refusal = destinations.refuse(channel, recipient);
         if (refusal.isPresent()) {
-            throw new UnacceptableRecipientException(refusal.get());
+            return replayOf(command)
+                    .orElseThrow(() -> new UnacceptableRecipientException(refusal.get()));
         }
 
         // The shared clock: next_attempt_at is compared against the database's own now(), so an
@@ -97,5 +98,21 @@ public class SubmitNotificationService implements SubmitNotificationUseCase {
             }
             return existing.id();
         }
+    }
+
+    private Optional<UUID> replayOf(SubmitNotificationCommand command) {
+        String key = command.idempotencyKey();
+        if (key == null) {
+            return Optional.empty();
+        }
+        return repository
+                .findByIdempotencyKey(key)
+                .map(
+                        existing -> {
+                            if (!existing.payload().equals(command.payload())) {
+                                throw new IdempotencyKeyReusedException(key, existing.id());
+                            }
+                            return existing.id();
+                        });
     }
 }
