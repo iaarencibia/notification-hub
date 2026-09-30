@@ -160,7 +160,8 @@ class DispatchNotificationsServiceTest {
         assertThat(dispatched).isEqualTo(1);
         Notification notification = queue.recorded().getFirst().claimed().notification();
         assertThat(notification.status()).isEqualTo(NotificationStatus.FAILED);
-        assertThat(notification.lastError()).contains("EMAIL");
+        assertThat(notification.lastError())
+                .isEqualTo("no adapter is configured for channel EMAIL on this deployment");
     }
 
     @Test

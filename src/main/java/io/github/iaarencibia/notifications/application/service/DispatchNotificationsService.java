@@ -96,11 +96,13 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
         NotificationChannelSender sender = senders.get(channel);
 
         if (sender == null) {
-            // Reachable when a deployment claims a row for a channel it no longer has an adapter
-            // for. Failed permanently: retrying would still find no adapter.
-            return new DispatchOutcome.PermanentFailure(
-                    null, "this deployment has no adapter for channel " + channel);
+            return noAdapterFor(channel);
         }
         return sender.send(notification);
+    }
+
+    private static DispatchOutcome noAdapterFor(Channel channel) {
+        return new DispatchOutcome.PermanentFailure(
+                null, "no adapter is configured for channel " + channel + " on this deployment");
     }
 }
