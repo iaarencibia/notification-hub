@@ -1,6 +1,6 @@
 package io.github.iaarencibia.notifications.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.context.annotation.Bean;
@@ -14,6 +14,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
  * The single place that decides who may reach what.
@@ -27,7 +28,9 @@ class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(
-            HttpSecurity http, NotificationsProperties properties, ObjectMapper objectMapper)
+            HttpSecurity http,
+            NotificationsProperties properties,
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver)
             throws Exception {
         // Written by the filter, read back by the chain on every dispatch of the same request.
         // Both sides find it because the attribute is named after the class, not the instance.
@@ -55,7 +58,7 @@ class SecurityConfig {
                 .exceptionHandling(
                         handling ->
                                 handling.authenticationEntryPoint(
-                                        new ApiKeyAuthenticationEntryPoint(objectMapper)))
+                                        new ApiKeyAuthenticationEntryPoint(exceptionResolver)))
                 // The credential travels on every request, so there is no state to keep -- and no
                 // rejected request stashed in a session awaiting a login that never comes.
                 .sessionManagement(

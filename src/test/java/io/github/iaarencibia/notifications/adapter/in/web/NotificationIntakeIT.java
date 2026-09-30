@@ -675,11 +675,10 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("answers a refusal and a rejection in the same shape, from its two producers")
-    void bothProducersAgreeOnTheShape() throws Exception {
-        // Two separate producers: a credential is refused in the filter chain, a body is
-        // rejected in the controller. The README promises RFC 9457 for both, and only this
-        // comparison keeps that promise honest.
+    @DisplayName("answers a refusal in the filter chain and a rejection in the controller alike")
+    void bothEntryPointsAgreeOnTheShape() throws Exception {
+        // The README promises RFC 9457 for both, and only this comparison keeps that promise
+        // honest.
         MvcResult refused =
                 mockMvc.perform(
                                 post(PATH)
