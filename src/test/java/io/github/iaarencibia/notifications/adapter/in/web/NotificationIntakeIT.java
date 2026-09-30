@@ -470,6 +470,48 @@ class NotificationIntakeIT extends IntegrationTestSupport {
         assertThat(countOf("it-form")).isZero();
     }
 
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "http://127.0.0.1/hook",
+                "http://[::1]/hook",
+                "http://10.0.0.5/hook",
+                "http://169.254.169.254/latest/meta-data"
+            })
+    @DisplayName("refuses a SERVICE recipient that names a private or local address")
+    void refusesAPrivateAddress(String recipient) throws Exception {
+        mockMvc.perform(
+                        submit(VALID_BODY.replace("https://destination.test/hook", recipient))
+                                .header("Idempotency-Key", "it-private"))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.errors.recipient")
+                                .value("must not name a private or local address"));
+
+        assertThat(countOf("it-private")).isZero();
+    }
+
+    @Test
+    @DisplayName("refuses a SERVICE recipient that names localhost")
+    void refusesLocalhost() throws Exception {
+        mockMvc.perform(
+                        submit(VALID_BODY.replace("destination.test", "localhost"))
+                                .header("Idempotency-Key", "it-localhost"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.recipient").value("must not name a local address"));
+
+        assertThat(countOf("it-localhost")).isZero();
+    }
+
+    @Test
+    @DisplayName("accepts a public name without resolving it, so an unresolvable host is still 202")
+    void acceptsAnUnresolvablePublicName() throws Exception {
+        mockMvc.perform(submit(VALID_BODY).header("Idempotency-Key", "it-public"))
+                .andExpect(status().isAccepted());
+
+        assertThat(countOf("it-public")).isEqualTo(1);
+    }
+
     @Test
     @DisplayName("refuses a body wider than the column that has to hold it")
     void refusesAnOversizedBody() throws Exception {

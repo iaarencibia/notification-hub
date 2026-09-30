@@ -7,6 +7,7 @@ import io.github.iaarencibia.notifications.application.port.out.NotificationChan
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -114,6 +115,6 @@ class ChannelConfigTest {
                 new NotificationsProperties.Retry(
                         3, Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                 new NotificationsProperties.Channels(
-                        new NotificationsProperties.Channels.Service(connect, read)));
+                        new NotificationsProperties.Channels.Service(connect, read, List.of())));
     }
 }

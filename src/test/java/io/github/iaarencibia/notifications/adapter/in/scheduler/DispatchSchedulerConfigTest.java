@@ -9,6 +9,7 @@ import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -146,7 +147,7 @@ class DispatchSchedulerConfigTest {
                         3, Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                 new NotificationsProperties.Channels(
                         new NotificationsProperties.Channels.Service(
-                                Duration.ofSeconds(2), Duration.ofSeconds(5))));
+                                Duration.ofSeconds(2), Duration.ofSeconds(5), List.of())));
     }
 
     private static final class CountingDispatcher implements DispatchDueNotificationsUseCase {

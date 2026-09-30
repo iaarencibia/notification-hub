@@ -45,7 +45,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
         properties = {
             "notifications.retry.initial-backoff=1ms",
             "notifications.retry.max-backoff=1ms",
-            "notifications.retry.jitter=0.0"
+            "notifications.retry.jitter=0.0",
+            "notifications.channels.service.allowed-hosts=localhost"
         })
 class NotificationDeliveryIT extends IntegrationTestSupport {
 

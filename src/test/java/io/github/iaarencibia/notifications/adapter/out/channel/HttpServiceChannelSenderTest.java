@@ -26,6 +26,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -97,7 +98,9 @@ class HttpServiceChannelSenderTest {
                                 .requestFactory(
                                         ChannelConfig.requestFactoryFor(
                                                 new NotificationsProperties.Channels.Service(
-                                                        Duration.ofMillis(500), READ_TIMEOUT)))
+                                                        Duration.ofMillis(500),
+                                                        READ_TIMEOUT,
+                                                        List.of())))
                                 .build());
     }
 
@@ -120,7 +123,8 @@ class HttpServiceChannelSenderTest {
                                         ChannelConfig.requestFactoryFor(
                                                 new NotificationsProperties.Channels.Service(
                                                         Duration.ofMillis(500),
-                                                        Duration.ofSeconds(3))))
+                                                        Duration.ofSeconds(3),
+                                                        List.of())))
                                 .build());
         destination.stubFor(
                 post(urlEqualTo(PATH))

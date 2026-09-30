@@ -35,7 +35,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** What a real intake and a real delivery leave on the Prometheus endpoint. */
-@SpringBootTest(properties = IntegrationTestSupport.API_KEY_PROPERTY)
+@SpringBootTest(
+        properties = {
+            IntegrationTestSupport.API_KEY_PROPERTY,
+            "notifications.channels.service.allowed-hosts=localhost"
+        })
 @AutoConfigureObservability
 @AutoConfigureMockMvc
 class DeliveryMetricsIT extends IntegrationTestSupport {
