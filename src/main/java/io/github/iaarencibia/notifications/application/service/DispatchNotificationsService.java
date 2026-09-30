@@ -25,13 +25,13 @@ import java.util.concurrent.Executor;
 public final class DispatchNotificationsService implements DispatchDueNotificationsUseCase {
 
     private final NotificationDispatchQueue queue;
-    private final Map<Channel, NotificationChannelSender> senders;
-    private final DispatchEvents events;
-    private final SystemClock clock;
-    private final RetryPolicy retryPolicy;
-    private final Executor deliveries;
-    private final String instanceId;
     private final int batchSize;
+    private final String instanceId;
+    private final DispatchEvents events;
+    private final Executor deliveries;
+    private final SystemClock clock;
+    private final Map<Channel, NotificationChannelSender> senders;
+    private final RetryPolicy retryPolicy;
 
     /**
      * @param deliveries bounded, so a slow destination costs a fixed number of threads rather than
@@ -39,25 +39,25 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
      */
     public DispatchNotificationsService(
             NotificationDispatchQueue queue,
-            Map<Channel, NotificationChannelSender> senders,
-            DispatchEvents events,
-            SystemClock clock,
-            RetryPolicy retryPolicy,
-            Executor deliveries,
+            int batchSize,
             String instanceId,
-            int batchSize) {
+            DispatchEvents events,
+            Executor deliveries,
+            SystemClock clock,
+            Map<Channel, NotificationChannelSender> senders,
+            RetryPolicy retryPolicy) {
 
         this.queue = Objects.requireNonNull(queue, "queue must not be null");
-        this.senders = Map.copyOf(Objects.requireNonNull(senders, "senders must not be null"));
-        this.events = Objects.requireNonNull(events, "events must not be null");
-        this.clock = Objects.requireNonNull(clock, "clock must not be null");
-        this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy must not be null");
-        this.deliveries = Objects.requireNonNull(deliveries, "deliveries must not be null");
-        this.instanceId = Objects.requireNonNull(instanceId, "instanceId must not be null");
         if (batchSize < 1) {
             throw new IllegalArgumentException("batchSize must be at least 1");
         }
         this.batchSize = batchSize;
+        this.instanceId = Objects.requireNonNull(instanceId, "instanceId must not be null");
+        this.events = Objects.requireNonNull(events, "events must not be null");
+        this.deliveries = Objects.requireNonNull(deliveries, "deliveries must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.senders = Map.copyOf(Objects.requireNonNull(senders, "senders must not be null"));
+        this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy must not be null");
     }
 
     @Override

@@ -22,32 +22,32 @@ import java.util.UUID;
  * Accepts a notification and, by the same write, queues it. Not transactional: a single write, with
  * nothing to hold together.
  */
-public class SubmitNotificationService implements SubmitNotificationUseCase {
+public final class SubmitNotificationService implements SubmitNotificationUseCase {
 
+    private final DeliverableChannels deliverableChannels;
+    private final DestinationPolicy destinations;
     private final NotificationRepository repository;
     private final SystemClock clock;
     private final int maxAttempts;
-    private final DeliverableChannels deliverableChannels;
     private final IntakeEvents events;
-    private final DestinationPolicy destinations;
 
     /**
      * @param clock the shared clock; the claim query compares against the same source
      */
     public SubmitNotificationService(
+            DeliverableChannels deliverableChannels,
+            DestinationPolicy destinations,
             NotificationRepository repository,
             SystemClock clock,
             int maxAttempts,
-            DeliverableChannels deliverableChannels,
-            IntakeEvents events,
-            DestinationPolicy destinations) {
+            IntakeEvents events) {
+        this.deliverableChannels =
+                Objects.requireNonNull(deliverableChannels, "deliverableChannels must not be null");
+        this.destinations = Objects.requireNonNull(destinations, "destinations must not be null");
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.maxAttempts = maxAttempts;
-        this.deliverableChannels =
-                Objects.requireNonNull(deliverableChannels, "deliverableChannels must not be null");
         this.events = Objects.requireNonNull(events, "events must not be null");
-        this.destinations = Objects.requireNonNull(destinations, "destinations must not be null");
     }
 
     @Override

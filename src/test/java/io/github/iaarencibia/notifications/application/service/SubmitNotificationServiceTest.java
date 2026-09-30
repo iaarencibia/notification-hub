@@ -53,7 +53,7 @@ class SubmitNotificationServiceTest {
     private final ScriptedDestinationPolicy destinations = new ScriptedDestinationPolicy();
     private final SubmitNotificationService service =
             new SubmitNotificationService(
-                    repository, () -> SHARED_NOW, MAX_ATTEMPTS, DELIVERABLE, events, destinations);
+                    DELIVERABLE, destinations, repository, () -> SHARED_NOW, MAX_ATTEMPTS, events);
 
     @Test
     @DisplayName("refuses a channel nothing can deliver, and writes no row")
@@ -256,7 +256,7 @@ class SubmitNotificationServiceTest {
         // Kept even if configuration changes while the notification is still in flight.
         SubmitNotificationService withADifferentBudget =
                 new SubmitNotificationService(
-                        repository, () -> SHARED_NOW, 7, DELIVERABLE, events, destinations);
+                        DELIVERABLE, destinations, repository, () -> SHARED_NOW, 7, events);
 
         withADifferentBudget.submit(
                 new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-1"));

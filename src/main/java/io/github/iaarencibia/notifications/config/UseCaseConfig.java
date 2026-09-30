@@ -44,19 +44,19 @@ class UseCaseConfig {
 
     @Bean
     SubmitNotificationUseCase submitNotificationUseCase(
+            DeliverableChannels deliverableChannels,
+            DestinationPolicy destinations,
             NotificationRepository repository,
             SystemClock clock,
             NotificationsProperties properties,
-            DeliverableChannels deliverableChannels,
-            IntakeEvents events,
-            DestinationPolicy destinations) {
+            IntakeEvents events) {
         return new SubmitNotificationService(
+                deliverableChannels,
+                destinations,
                 repository,
                 clock,
                 properties.retry().maxAttempts(),
-                deliverableChannels,
-                events,
-                destinations);
+                events);
     }
 
     /**
@@ -74,21 +74,21 @@ class UseCaseConfig {
     @Bean
     DispatchDueNotificationsUseCase dispatchDueNotificationsUseCase(
             NotificationDispatchQueue queue,
-            Map<Channel, NotificationChannelSender> senders,
+            NotificationsProperties properties,
             List<DispatchEvents> events,
-            SystemClock clock,
-            RetryPolicy retryPolicy,
             @Qualifier(DISPATCH_WORKERS) Executor workers,
-            NotificationsProperties properties) {
+            SystemClock clock,
+            Map<Channel, NotificationChannelSender> senders,
+            RetryPolicy retryPolicy) {
         return new DispatchNotificationsService(
                 queue,
-                senders,
-                new CompositeDispatchEvents(events),
-                clock,
-                retryPolicy,
-                workers,
+                properties.dispatch().batchSize(),
                 properties.instanceId(),
-                properties.dispatch().batchSize());
+                new CompositeDispatchEvents(events),
+                workers,
+                clock,
+                senders,
+                retryPolicy);
     }
 
     @Bean
