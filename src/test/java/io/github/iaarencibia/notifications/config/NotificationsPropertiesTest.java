@@ -2,14 +2,23 @@ package io.github.iaarencibia.notifications.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import java.lang.annotation.Annotation;
 import java.time.Duration;
+import java.util.Objects;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.bind.validation.BindValidationException;
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.ContextConsumer;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.FieldError;
 
 /**
  * What is under test is not the annotations but the moment they take effect: an unusable value has
@@ -111,7 +120,7 @@ class NotificationsPropertiesTest {
     @DisplayName("refuses to start when the channel timeouts are absent altogether")
     void rejectsMissingChannelsBlock() {
         runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_REAPER, VALID_RETRY)
-                .run(failsNaming("channels", "must not be null"));
+                .run(failsOn("channels", NotNull.class));
     }
 
     @Test
@@ -132,7 +141,7 @@ class NotificationsPropertiesTest {
         // would let a half-configured channel bind, turning the missing timeout into "no timeout".
         runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_REAPER, VALID_RETRY)
                 .withPropertyValues("notifications.channels.service.connect-timeout=2s")
-                .run(failsNaming("readTimeout", "must not be null"));
+                .run(failsOn("readTimeout", NotNull.class));
     }
 
     @Test
@@ -156,7 +165,7 @@ class NotificationsPropertiesTest {
     void rejectsInstanceIdOverColumnWidth() {
         complete()
                 .withPropertyValues(instanceIdOf(CLAIMED_BY_WIDTH + 1))
-                .run(failsNaming("instanceId", "size must be between"));
+                .run(failsOn("instanceId", Size.class));
     }
 
     @Test
@@ -164,7 +173,7 @@ class NotificationsPropertiesTest {
     void rejectsBlankInstanceId() {
         complete()
                 .withPropertyValues("notifications.instance-id=   ")
-                .run(failsNaming("instanceId", "must not be blank"));
+                .run(failsOn("instanceId", NotBlank.class));
     }
 
     @Test
@@ -172,14 +181,14 @@ class NotificationsPropertiesTest {
     void rejectsBlankApiKey() {
         complete()
                 .withPropertyValues("notifications.security.api-key=")
-                .run(failsNaming("apiKey", "must not be blank"));
+                .run(failsOn("apiKey", NotBlank.class));
     }
 
     @Test
     @DisplayName("refuses to start when the security block is absent altogether")
     void rejectsMissingSecurityBlock() {
         runnerWith(VALID_INSTANCE_ID, VALID_DISPATCH, VALID_REAPER, VALID_RETRY, VALID_CHANNELS)
-                .run(failsNaming("security", "must not be null"));
+                .run(failsOn("security", NotNull.class));
     }
 
     @Test
@@ -190,21 +199,21 @@ class NotificationsPropertiesTest {
         // this is the only one of the three that fires before any traffic arrives.
         complete()
                 .withPropertyValues("notifications.retry.max-attempts=0")
-                .run(failsNaming("maxAttempts", "must be greater than or equal to 1"));
+                .run(failsOn("maxAttempts", Min.class));
     }
 
     @Test
     @DisplayName("refuses to start when the retry block is absent altogether")
     void rejectsMissingRetryBlock() {
         runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_REAPER, VALID_CHANNELS)
-                .run(failsNaming("retry", "must not be null"));
+                .run(failsOn("retry", NotNull.class));
     }
 
     @Test
     @DisplayName("refuses to start when the dispatch block is absent altogether")
     void rejectsMissingDispatchBlock() {
         runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_REAPER, VALID_RETRY, VALID_CHANNELS)
-                .run(failsNaming("dispatch", "must not be null"));
+                .run(failsOn("dispatch", NotNull.class));
     }
 
     @Test
@@ -224,7 +233,7 @@ class NotificationsPropertiesTest {
         // unusual, and delivers nothing.
         complete()
                 .withPropertyValues("notifications.dispatch.batch-size=0")
-                .run(failsNaming("batchSize", "must be greater than or equal to 1"));
+                .run(failsOn("batchSize", Min.class));
     }
 
     @Test
@@ -234,14 +243,14 @@ class NotificationsPropertiesTest {
         // DISPATCHING until the reaper released them for the same idle instance to reclaim.
         complete()
                 .withPropertyValues("notifications.dispatch.worker-pool-size=0")
-                .run(failsNaming("workerPoolSize", "must be greater than or equal to 1"));
+                .run(failsOn("workerPoolSize", Min.class));
     }
 
     @Test
     @DisplayName("refuses to start when the reaper block is absent altogether")
     void rejectsMissingReaperBlock() {
         runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_RETRY, VALID_CHANNELS)
-                .run(failsNaming("reaper", "must not be null"));
+                .run(failsOn("reaper", NotNull.class));
     }
 
     @Test
@@ -302,6 +311,30 @@ class NotificationsPropertiesTest {
             for (String fragment : fragments) {
                 assertThat(context.getStartupFailure()).hasStackTraceContaining(fragment);
             }
+        };
+    }
+
+    private static ContextConsumer<AssertableApplicationContext> failsOn(
+            String field, Class<? extends Annotation> constraint) {
+        return context -> {
+            assertThat(context).hasFailed();
+            BindValidationException failure =
+                    (BindValidationException)
+                            Stream.iterate(
+                                            context.getStartupFailure(),
+                                            Objects::nonNull,
+                                            Throwable::getCause)
+                                    .filter(BindValidationException.class::isInstance)
+                                    .findFirst()
+                                    .orElseThrow();
+            assertThat(failure.getValidationErrors().getAllErrors())
+                    .filteredOn(FieldError.class::isInstance)
+                    .map(FieldError.class::cast)
+                    .anySatisfy(
+                            error -> {
+                                assertThat(error.getField()).matches("(.*\\.)?" + field);
+                                assertThat(error.getCode()).isEqualTo(constraint.getSimpleName());
+                            });
         };
     }
 
