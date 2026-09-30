@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.http.Fault;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.CorrelationId;
@@ -20,6 +21,7 @@ import io.github.iaarencibia.notifications.domain.DispatchOutcome;
 import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
 import io.github.iaarencibia.notifications.domain.Priority;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,6 +37,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
@@ -100,7 +103,8 @@ class HttpServiceChannelSenderTest {
                                                 new NotificationsProperties.Channels.Service(
                                                         Duration.ofMillis(500),
                                                         READ_TIMEOUT,
-                                                        List.of())))
+                                                        List.of()),
+                                                8))
                                 .build());
     }
 
@@ -124,7 +128,8 @@ class HttpServiceChannelSenderTest {
                                                 new NotificationsProperties.Channels.Service(
                                                         Duration.ofMillis(500),
                                                         Duration.ofSeconds(3),
-                                                        List.of())))
+                                                        List.of()),
+                                                8))
                                 .build());
         destination.stubFor(
                 post(urlEqualTo(PATH))
@@ -281,6 +286,57 @@ class HttpServiceChannelSenderTest {
                 .isInstanceOf(DispatchOutcome.PermanentFailure.class);
         assertThat(outcome.errorMessage()).isNotBlank();
         assertThat(destination.getAllServeEvents()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("treats a refused connection as worth trying again, with no status")
+    void retriesARefusedConnection() throws Exception {
+        int closedPort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            closedPort = socket.getLocalPort();
+        }
+
+        DispatchOutcome outcome =
+                sender.send(notificationTo("http://localhost:" + closedPort + PATH));
+
+        assertThat(outcome).isInstanceOf(DispatchOutcome.RetryableFailure.class);
+        assertThat(outcome.responseCode()).isNull();
+    }
+
+    @Test
+    @DisplayName("sends a request once even when the destination answers 503")
+    void doesNotRetryAServerErrorItself() {
+        destination.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(503)));
+
+        sender.send(notification());
+
+        destination.verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    @DisplayName("sends a request once even when the destination asks for fewer with a delay")
+    void doesNotRetryARateLimitItself() {
+        destination.stubFor(
+                post(urlEqualTo(PATH))
+                        .willReturn(aResponse().withStatus(429).withHeader("Retry-After", "1")));
+
+        sender.send(notification());
+
+        destination.verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = Fault.class,
+            names = {"EMPTY_RESPONSE", "CONNECTION_RESET_BY_PEER"})
+    @DisplayName("sends a request once even when the connection drops, and reports it as retryable")
+    void doesNotRetryADroppedConnectionItself(Fault fault) {
+        destination.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withFault(fault)));
+
+        DispatchOutcome outcome = sender.send(notification());
+
+        assertThat(outcome).isInstanceOf(DispatchOutcome.RetryableFailure.class);
+        destination.verify(1, postRequestedFor(urlEqualTo(PATH)));
     }
 
     @ParameterizedTest

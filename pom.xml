@@ -68,10 +68,11 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!--
-          The SERVICE channel uses RestClient over the JDK HttpClient (spring-web).
-          No extra HTTP client dependency is required.
-        -->
+        <!-- The SERVICE channel's client: its DNS resolver is pluggable, the JDK's is not -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
 
         <!-- Schema is owned by versioned migrations, never by Hibernate DDL generation -->
         <dependency>
