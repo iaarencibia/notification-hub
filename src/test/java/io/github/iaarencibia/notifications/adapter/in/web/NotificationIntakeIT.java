@@ -561,6 +561,35 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("refuses a NUL character in the subject instead of failing at the database")
+    void refusesANulCharacterInTheSubject() throws Exception {
+        mockMvc.perform(
+                        submit(
+                                VALID_BODY.replace(
+                                        "Your order shipped", "Your order\\u0000shipped")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.subject").value("must not contain a NUL character"));
+    }
+
+    @Test
+    @DisplayName("refuses a NUL character in a metadata value, naming its key")
+    void refusesANulCharacterInAMetadataValue() throws Exception {
+        mockMvc.perform(submit(bodyWithMetadata("\"orderId\":\"44\\u00007\"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.errors.['metadata[orderId]']")
+                                .value("must not contain a NUL character"));
+    }
+
+    @Test
+    @DisplayName("refuses a blank metadata key, since a key is an identifier")
+    void refusesABlankMetadataKey() throws Exception {
+        mockMvc.perform(submit(bodyWithMetadata("\"  \":\"v\"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.['metadata[  ]']").value("must not be blank"));
+    }
+
+    @Test
     @DisplayName("refuses a correlation id outside the character set it is allowed")
     void refusesAMalformedCorrelationId() throws Exception {
         // The value is written into a structured log line on every attempt, hence the narrow

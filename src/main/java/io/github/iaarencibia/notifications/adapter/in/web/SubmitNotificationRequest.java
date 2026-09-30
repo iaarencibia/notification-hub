@@ -25,25 +25,29 @@ import java.util.Map;
 record SubmitNotificationRequest(
         @NotBlank(message = "must not be blank")
                 @CharacterLength(max = NotificationPayload.MAX_RECIPIENT_LENGTH)
+                @NoNulCharacter
                 String recipient,
         @NotNull(message = "must be present") Channel channel,
         @NotBlank(message = "must not be blank")
                 @CharacterLength(max = NotificationPayload.MAX_SUBJECT_LENGTH)
+                @NoNulCharacter
                 String subject,
         @NotNull(message = "must be present, though it may be empty")
                 @CharacterLength(max = NotificationPayload.MAX_BODY_LENGTH)
+                @NoNulCharacter
                 String body,
         @NotNull(message = "must be present") Priority priority,
         @Size(
                         max = NotificationPayload.MAX_METADATA_ENTRIES,
                         message = "must not exceed {max} entries")
                 Map<
+                                @NotBlank(message = "must not be blank")
                                 @CharacterLength(max = NotificationPayload.MAX_METADATA_KEY_LENGTH)
-                                String,
+                                @NoNulCharacter String,
                                 @NotNull(message = "must not be null")
                                 @CharacterLength(
                                         max = NotificationPayload.MAX_METADATA_VALUE_LENGTH)
-                                String>
+                                @NoNulCharacter String>
                         metadata) {
 
     NotificationPayload toPayload() {

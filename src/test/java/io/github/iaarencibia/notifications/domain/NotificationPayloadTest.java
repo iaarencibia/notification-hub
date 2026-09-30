@@ -156,6 +156,19 @@ class NotificationPayloadTest {
     }
 
     @Nested
+    @DisplayName("NUL character")
+    class NulCharacter {
+
+        @Test
+        @DisplayName("is rejected in the recipient, the subject and the body")
+        void rejectedInTextFields() {
+            assertThatIllegalArgumentException().isThrownBy(() -> withRecipient("a\u0000b"));
+            assertThatIllegalArgumentException().isThrownBy(() -> withSubject("a\u0000b"));
+            assertThatIllegalArgumentException().isThrownBy(() -> withBody("a\u0000b"));
+        }
+    }
+
+    @Nested
     @DisplayName("metadata")
     class Metadata {
 
@@ -187,6 +200,27 @@ class NotificationPayloadTest {
         void namesTheOffendingKey() {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> withMetadata(Map.of("orderId", "v".repeat(2049))))
+                    .withMessageContaining("orderId");
+        }
+
+        @Test
+        @DisplayName("rejects a blank key, since a key is an identifier")
+        void rejectsBlankKey() {
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> withMetadata(Map.of("", "v")))
+                    .withMessageContaining("must not be blank");
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> withMetadata(Map.of("  ", "v")))
+                    .withMessageContaining("must not be blank");
+        }
+
+        @Test
+        @DisplayName("rejects a NUL character in a key or a value")
+        void rejectsNulCharacter() {
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> withMetadata(Map.of("ke\u0000y", "v")));
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> withMetadata(Map.of("orderId", "v\u0000")))
                     .withMessageContaining("orderId");
         }
 
