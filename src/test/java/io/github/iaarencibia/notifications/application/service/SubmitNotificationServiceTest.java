@@ -7,7 +7,9 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.IdempotencyKeyReusedException;
 import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationCommand;
+import io.github.iaarencibia.notifications.application.port.in.UnacceptableRecipientException;
 import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
+import io.github.iaarencibia.notifications.application.port.out.DestinationPolicy;
 import io.github.iaarencibia.notifications.application.port.out.IdempotencyKeyAlreadyUsedException;
 import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
@@ -48,9 +50,10 @@ class SubmitNotificationServiceTest {
 
     private final InMemoryNotifications repository = new InMemoryNotifications();
     private final RecordingIntakeEvents events = new RecordingIntakeEvents();
+    private final ScriptedDestinationPolicy destinations = new ScriptedDestinationPolicy();
     private final SubmitNotificationService service =
             new SubmitNotificationService(
-                    repository, () -> SHARED_NOW, MAX_ATTEMPTS, DELIVERABLE, events);
+                    repository, () -> SHARED_NOW, MAX_ATTEMPTS, DELIVERABLE, events, destinations);
 
     @Test
     @DisplayName("refuses a channel nothing can deliver, and writes no row")
@@ -83,6 +86,56 @@ class SubmitNotificationServiceTest {
                 .as("nothing may be stored for a notification that cannot be sent")
                 .isEmpty();
         assertThat(events.accepted).isEmpty();
+    }
+
+    @Test
+    @DisplayName("refuses a recipient the deployment's policy refuses, and writes no row")
+    void refusesARecipientThePolicyRefuses() {
+        destinations.refuseWith("must not name a local address");
+
+        assertThatExceptionOfType(UnacceptableRecipientException.class)
+                .isThrownBy(
+                        () ->
+                                service.submit(
+                                        new SubmitNotificationCommand(
+                                                payloadTo("http://localhost/hook"),
+                                                CORRELATION_ID,
+                                                "key-policy")))
+                .satisfies(
+                        thrown -> {
+                            assertThat(thrown.reason()).isEqualTo("must not name a local address");
+                            assertThat(thrown)
+                                    .hasMessage("recipient must not name a local address");
+                        });
+
+        assertThat(repository.stored()).isEmpty();
+        assertThat(events.accepted).isEmpty();
+    }
+
+    @Test
+    @DisplayName("asks the policy about the channel and recipient it was given")
+    void consultsThePolicy() {
+        service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-1"));
+
+        assertThat(destinations.asked)
+                .containsExactly(Map.entry(Channel.SERVICE, "https://destination.test/hook"));
+    }
+
+    @Test
+    @DisplayName("accepts a LOG recipient that is no URL, as the policy has no objection")
+    void acceptsAPlainLogRecipient() {
+        NotificationPayload toTheTeam =
+                new NotificationPayload(
+                        "ops-team",
+                        Channel.LOG,
+                        "Your order shipped",
+                        "It is on its way.",
+                        Priority.HIGH,
+                        Map.of());
+
+        service.submit(new SubmitNotificationCommand(toTheTeam, CORRELATION_ID, "key-log"));
+
+        assertThat(repository.only().payload().recipient()).isEqualTo("ops-team");
     }
 
     @Test
@@ -151,7 +204,8 @@ class SubmitNotificationServiceTest {
     void stampsTheConfiguredBudget() {
         // Kept even if configuration changes while the notification is still in flight.
         SubmitNotificationService withADifferentBudget =
-                new SubmitNotificationService(repository, () -> SHARED_NOW, 7, DELIVERABLE, events);
+                new SubmitNotificationService(
+                        repository, () -> SHARED_NOW, 7, DELIVERABLE, events, destinations);
 
         withADifferentBudget.submit(
                 new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-1"));
@@ -284,13 +338,33 @@ class SubmitNotificationServiceTest {
     }
 
     private static NotificationPayload payload() {
+        return payloadTo("https://destination.test/hook");
+    }
+
+    private static NotificationPayload payloadTo(String recipient) {
         return new NotificationPayload(
-                "https://destination.test/hook",
+                recipient,
                 Channel.SERVICE,
                 "Your order shipped",
                 "It is on its way.",
                 Priority.HIGH,
                 Map.of("orderId", "4471"));
+    }
+
+    private static final class ScriptedDestinationPolicy implements DestinationPolicy {
+
+        private final List<Map.Entry<Channel, String>> asked = new ArrayList<>();
+        private String refusal;
+
+        void refuseWith(String reason) {
+            this.refusal = reason;
+        }
+
+        @Override
+        public Optional<String> refuse(Channel channel, String recipient) {
+            asked.add(Map.entry(channel, recipient));
+            return Optional.ofNullable(refusal);
+        }
     }
 
     private static final class RecordingIntakeEvents implements IntakeEvents {
