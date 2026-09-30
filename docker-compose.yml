@@ -77,6 +77,8 @@ services:
       # so the stack starts without any secret provisioning on a clean checkout.
       NOTIFICATIONS_API_KEY: ${NOTIFICATIONS_API_KEY:-local-dev-api-key-change-me}
       LOG_LEVEL_APP: ${LOG_LEVEL_APP:-DEBUG}
+      # The demo destination lives on the compose network, at an address the service would refuse.
+      SERVICE_CHANNEL_ALLOWED_HOSTS: wiremock
     ports:
       - "8080:8080"
     healthcheck:

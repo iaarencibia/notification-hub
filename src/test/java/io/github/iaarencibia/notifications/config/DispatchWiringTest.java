@@ -80,7 +80,7 @@ class DispatchWiringTest {
                         3, Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                 new NotificationsProperties.Channels(
                         new NotificationsProperties.Channels.Service(
-                                Duration.ofSeconds(2), Duration.ofSeconds(5))));
+                                Duration.ofSeconds(2), Duration.ofSeconds(5), List.of())));
     }
 
     /** Records what the dispatcher asked it to claim. */

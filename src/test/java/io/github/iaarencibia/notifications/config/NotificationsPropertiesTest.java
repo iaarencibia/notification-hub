@@ -46,7 +46,8 @@ class NotificationsPropertiesTest {
     };
     private static final String[] VALID_CHANNELS = {
         "notifications.channels.service.connect-timeout=2s",
-        "notifications.channels.service.read-timeout=5s"
+        "notifications.channels.service.read-timeout=5s",
+        "notifications.channels.service.allowed-hosts="
     };
 
     @Test
@@ -86,7 +87,24 @@ class NotificationsPropertiesTest {
                                     .isEqualTo(Duration.ofSeconds(2));
                             assertThat(properties.channels().service().readTimeout())
                                     .isEqualTo(Duration.ofSeconds(5));
+                            assertThat(properties.channels().service().allowedHosts()).isEmpty();
                         });
+    }
+
+    @Test
+    @DisplayName("binds a comma separated list of hosts, and keeps each one as written")
+    void bindsTheAllowedHosts() {
+        complete()
+                .withPropertyValues(
+                        "notifications.channels.service.allowed-hosts=wiremock,Hooks.internal")
+                .run(
+                        context ->
+                                assertThat(
+                                                context.getBean(NotificationsProperties.class)
+                                                        .channels()
+                                                        .service()
+                                                        .allowedHosts())
+                                        .containsExactly("wiremock", "Hooks.internal"));
     }
 
     @Test

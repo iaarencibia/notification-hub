@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import io.github.iaarencibia.notifications.domain.RetryPolicy;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,6 @@ class RetryPolicyWiringTest {
                         3, initialBackoff, multiplier, maxBackoff, jitter),
                 new NotificationsProperties.Channels(
                         new NotificationsProperties.Channels.Service(
-                                Duration.ofSeconds(2), Duration.ofSeconds(5))));
+                                Duration.ofSeconds(2), Duration.ofSeconds(5), List.of())));
     }
 }

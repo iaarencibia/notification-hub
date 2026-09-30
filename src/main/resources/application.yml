@@ -134,3 +134,4 @@ notifications:
     service:
       connect-timeout: ${SERVICE_CHANNEL_CONNECT_TIMEOUT:2s}
       read-timeout: ${SERVICE_CHANNEL_READ_TIMEOUT:5s}
+      allowed-hosts: ${SERVICE_CHANNEL_ALLOWED_HOSTS:}

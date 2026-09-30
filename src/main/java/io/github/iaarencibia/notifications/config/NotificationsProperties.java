@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Duration;
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -120,8 +121,13 @@ public record NotificationsProperties(
          *
          * @param connectTimeout how long to wait for the destination to accept a connection
          * @param readTimeout how long to wait for its answer once connected
+         * @param allowedHosts hosts exempt from the private-address rules, never from the scheme
+         *     rules
          */
-        public record Service(@NotNull Duration connectTimeout, @NotNull Duration readTimeout) {
+        public record Service(
+                @NotNull Duration connectTimeout,
+                @NotNull Duration readTimeout,
+                @NotNull List<String> allowedHosts) {
 
             public Service {
                 requirePositive(connectTimeout, "connectTimeout");
