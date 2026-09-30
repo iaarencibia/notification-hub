@@ -293,6 +293,24 @@ class HttpServiceChannelSenderTest {
         assertThat(outcome.responseCode()).isEqualTo(status);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {301, 302, 303, 307, 308})
+    @DisplayName("treats a redirect as permanent, and never follows it")
+    void treatsARedirectAsPermanent(int status) {
+        destination.stubFor(
+                post(urlEqualTo(PATH))
+                        .willReturn(
+                                aResponse().withStatus(status).withHeader("Location", "/moved")));
+        destination.stubFor(post(urlEqualTo("/moved")).willReturn(aResponse().withStatus(200)));
+
+        DispatchOutcome outcome = sender.send(notification());
+
+        assertThat(outcome).isInstanceOf(DispatchOutcome.PermanentFailure.class);
+        assertThat(outcome.responseCode()).isEqualTo(status);
+        assertThat(outcome.errorMessage()).contains("/moved");
+        destination.verify(0, postRequestedFor(urlEqualTo("/moved")));
+    }
+
     @Test
     @DisplayName("sends the payload the destination needs, and nothing about the lifecycle")
     void sendsThePayloadAndNoLifecycle() throws Exception {
