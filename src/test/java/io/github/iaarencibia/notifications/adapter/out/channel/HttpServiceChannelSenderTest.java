@@ -31,6 +31,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,16 +98,10 @@ class HttpServiceChannelSenderTest {
         // depends on how the client reports a timeout and a bodiless response, so a different
         // client here would be exercising something this service never runs.
         sender =
-                new HttpServiceChannelSender(
-                        RestClient.builder()
-                                .requestFactory(
-                                        ChannelConfig.requestFactoryFor(
-                                                new NotificationsProperties.Channels.Service(
-                                                        Duration.ofMillis(500),
-                                                        READ_TIMEOUT,
-                                                        List.of()),
-                                                8))
-                                .build());
+                senderOver(
+                        READ_TIMEOUT,
+                        ServiceDestinationPolicies.allowing("localhost"),
+                        SystemDefaultDnsResolver.INSTANCE);
     }
 
     @Test
@@ -121,16 +117,10 @@ class HttpServiceChannelSenderTest {
         // changes behaviour, and every other test here stays green. What tells them apart is a
         // destination that answers slowly -- only the read timeout is measured against that.
         HttpServiceChannelSender patient =
-                new HttpServiceChannelSender(
-                        RestClient.builder()
-                                .requestFactory(
-                                        ChannelConfig.requestFactoryFor(
-                                                new NotificationsProperties.Channels.Service(
-                                                        Duration.ofMillis(500),
-                                                        Duration.ofSeconds(3),
-                                                        List.of()),
-                                                8))
-                                .build());
+                senderOver(
+                        Duration.ofSeconds(3),
+                        ServiceDestinationPolicies.allowing("localhost"),
+                        SystemDefaultDnsResolver.INSTANCE);
         destination.stubFor(
                 post(urlEqualTo(PATH))
                         .willReturn(aResponse().withStatus(200).withFixedDelay(1500)));
@@ -289,6 +279,34 @@ class HttpServiceChannelSenderTest {
     }
 
     @Test
+    @DisplayName("connects to the address the vetting resolution returned, resolving the name once")
+    void connectsThroughTheVettedResolution() {
+        destination.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200)));
+        StubDnsResolver dns = StubDnsResolver.answering("hook.test", "127.0.0.1");
+        HttpServiceChannelSender allowing =
+                senderOver(READ_TIMEOUT, ServiceDestinationPolicies.allowing("hook.test"), dns);
+
+        DispatchOutcome outcome =
+                allowing.send(notificationTo("http://hook.test:" + destination.port() + PATH));
+
+        assertThat(outcome).isEqualTo(new DispatchOutcome.Success(200));
+        assertThat(dns.lookups()).containsExactly("hook.test");
+    }
+
+    @Test
+    @DisplayName("treats a name that does not resolve as worth trying again, with no status")
+    void retriesAnUnknownHost() {
+        HttpServiceChannelSender unresolved =
+                senderOver(READ_TIMEOUT, noAllowedHosts(), StubDnsResolver.knowingNothing());
+
+        DispatchOutcome outcome = unresolved.send(notificationTo("http://hook.test/hook"));
+
+        assertThat(outcome).isInstanceOf(DispatchOutcome.RetryableFailure.class);
+        assertThat(outcome.responseCode()).isNull();
+        assertThat(outcome.errorMessage()).contains("hook.test");
+    }
+
+    @Test
     @DisplayName("treats a refused connection as worth trying again, with no status")
     void retriesARefusedConnection() throws Exception {
         int closedPort;
@@ -403,6 +421,24 @@ class HttpServiceChannelSenderTest {
         assertThat(sent.fieldNames())
                 .toIterable()
                 .containsExactlyInAnyOrder("recipient", "subject", "body", "priority", "metadata");
+    }
+
+    private static HttpServiceChannelSender senderOver(
+            Duration readTimeout, ServiceDestinationPolicy policy, DnsResolver dns) {
+        return new HttpServiceChannelSender(
+                RestClient.builder()
+                        .requestFactory(
+                                ChannelConfig.requestFactoryFor(
+                                        new NotificationsProperties.Channels.Service(
+                                                Duration.ofMillis(500), readTimeout, List.of()),
+                                        8,
+                                        policy,
+                                        dns))
+                        .build());
+    }
+
+    private static ServiceDestinationPolicy noAllowedHosts() {
+        return ServiceDestinationPolicies.allowing();
     }
 
     private Notification notification() {

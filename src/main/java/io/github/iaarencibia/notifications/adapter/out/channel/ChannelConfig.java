@@ -2,6 +2,8 @@ package io.github.iaarencibia.notifications.adapter.out.channel;
 
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -40,14 +42,18 @@ class ChannelConfig {
     @Bean(defaultCandidate = false)
     @Qualifier(SERVICE_CHANNEL_CLIENT)
     RestClient serviceChannelRestClient(
-            RestClient.Builder builder, NotificationsProperties properties) {
+            RestClient.Builder builder,
+            NotificationsProperties properties,
+            ServiceDestinationPolicy destinationPolicy) {
         // Boot's builder, not RestClient.builder(): the static factory skips every customizer,
         // including the one that instruments the call -- and this is the only call whose latency
         // the resilience requirement is about.
         return builder.requestFactory(
                         requestFactoryFor(
                                 properties.channels().service(),
-                                properties.dispatch().workerPoolSize()))
+                                properties.dispatch().workerPoolSize(),
+                                destinationPolicy,
+                                SystemDefaultDnsResolver.INSTANCE))
                 .build();
     }
 
@@ -60,7 +66,10 @@ class ChannelConfig {
      * expensive failure -- is caught only by the read timeout.
      */
     static ClientHttpRequestFactory requestFactoryFor(
-            NotificationsProperties.Channels.Service service, int workers) {
+            NotificationsProperties.Channels.Service service,
+            int workers,
+            ServiceDestinationPolicy policy,
+            DnsResolver dnsResolver) {
         ConnectionConfig connection =
                 ConnectionConfig.custom()
                         .setConnectTimeout(Timeout.of(service.connectTimeout()))
@@ -68,6 +77,7 @@ class ChannelConfig {
                         .build();
         PoolingHttpClientConnectionManager connections =
                 PoolingHttpClientConnectionManagerBuilder.create()
+                        .setDnsResolver(new VettingDnsResolver(policy, dnsResolver))
                         .setDefaultConnectionConfig(connection)
                         .setMaxConnPerRoute(workers)
                         .setMaxConnTotal(workers)
