@@ -53,6 +53,24 @@ final class ServiceDestinationPolicy implements DestinationPolicy {
         return Optional.empty();
     }
 
+    Optional<String> refuseBeforeConnecting(URI destination) {
+        Optional<String> unusable = whyUnusable(destination);
+        if (unusable.isPresent()) {
+            return unusable;
+        }
+        String host = hostOf(destination);
+        if (isAllowed(host)) {
+            return Optional.empty();
+        }
+        if (isLocalName(host)) {
+            return Optional.of("recipient names a local address");
+        }
+        if (isBlockedLiteral(host)) {
+            return Optional.of("recipient names a private or local address");
+        }
+        return Optional.empty();
+    }
+
     boolean allows(String host) {
         return isAllowed(bare(host));
     }

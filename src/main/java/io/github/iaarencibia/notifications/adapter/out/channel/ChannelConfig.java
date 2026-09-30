@@ -103,7 +103,8 @@ class ChannelConfig {
      */
     @Bean
     NotificationChannelSender httpServiceChannelSender(
-            @Qualifier(SERVICE_CHANNEL_CLIENT) RestClient serviceChannelRestClient) {
-        return new HttpServiceChannelSender(serviceChannelRestClient);
+            @Qualifier(SERVICE_CHANNEL_CLIENT) RestClient serviceChannelRestClient,
+            ServiceDestinationPolicy destinationPolicy) {
+        return new HttpServiceChannelSender(serviceChannelRestClient, destinationPolicy);
     }
 }
