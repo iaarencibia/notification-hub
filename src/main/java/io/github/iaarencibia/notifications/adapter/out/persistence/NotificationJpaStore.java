@@ -49,6 +49,16 @@ class NotificationJpaStore {
                AND claimed_at < now() - make_interval(secs => :seconds)
             """;
 
+    private static final String RECORD_LIFECYCLE =
+            """
+            UPDATE NotificationEntity n
+               SET n.status = :status, n.attempts = :attempts,
+                   n.nextAttemptAt = :nextAttemptAt, n.lastError = :lastError,
+                   n.claimedAt = :claimedAt, n.claimedBy = :claimedBy, n.sentAt = :sentAt,
+                   n.updatedAt = :updatedAt, n.version = n.version + 1
+             WHERE n.id = :id AND n.version = :version
+            """;
+
     private final EntityManager entityManager;
 
     NotificationJpaStore(EntityManager entityManager) {
@@ -90,14 +100,33 @@ class NotificationJpaStore {
 
     /**
      * Writes the result of one delivery: the attempt, and the state it left the notification in.
+     *
+     * @return whether the claim still held; when it did not, nothing was written
      */
     @Transactional
-    void recordAttempt(NotificationEntity claimed, NotificationAttemptEntity attempt) {
-        entityManager.merge(claimed);
+    boolean recordAttempt(
+            Notification notification, long claimedVersion, NotificationAttemptEntity attempt) {
+        int updated =
+                entityManager
+                        .createQuery(RECORD_LIFECYCLE)
+                        .setParameter("status", notification.status())
+                        .setParameter("attempts", notification.attempts())
+                        .setParameter("nextAttemptAt", notification.nextAttemptAt())
+                        .setParameter("lastError", notification.lastError())
+                        .setParameter("claimedAt", notification.claimedAt())
+                        .setParameter("claimedBy", notification.claimedBy())
+                        .setParameter("sentAt", notification.sentAt())
+                        .setParameter("updatedAt", notification.updatedAt())
+                        .setParameter("id", notification.id())
+                        .setParameter("version", claimedVersion)
+                        .executeUpdate();
+        if (updated == 0) {
+            return false;
+        }
+
         entityManager.persist(attempt);
-        // Both statements are sent before this method returns, so a claim that was lost is
-        // reported to the caller rather than surfacing later as a failed commit it cannot place.
         entityManager.flush();
+        return true;
     }
 
     /**
