@@ -62,7 +62,7 @@ public record NotificationPayload(
         }
         metadata.forEach(
                 (key, value) -> {
-                    requireWithin(key, "metadata key", MAX_METADATA_KEY_LENGTH);
+                    requireText(key, "metadata key", MAX_METADATA_KEY_LENGTH);
                     // Named with its key so a caller holding many entries knows which one to
                     // shorten.
                     requireWithin(
@@ -84,6 +84,9 @@ public record NotificationPayload(
      * the column accepts.
      */
     private static String requireWithin(String value, String field, int maxLength) {
+        if (value.indexOf('\u0000') >= 0) {
+            throw new IllegalArgumentException(field + " must not contain a NUL character");
+        }
         if (value.codePointCount(0, value.length()) > maxLength) {
             throw new IllegalArgumentException(
                     field + " must not exceed " + maxLength + " characters");
