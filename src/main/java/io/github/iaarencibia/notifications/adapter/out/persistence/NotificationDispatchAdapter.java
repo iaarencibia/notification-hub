@@ -7,16 +7,13 @@ import io.github.iaarencibia.notifications.application.port.out.NotificationDisp
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import java.time.Duration;
 import java.util.List;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 
 /**
  * The outbound side of dispatch: claiming work, reporting on it, and recovering what was abandoned.
  *
- * <p>Sits outside {@link NotificationJpaStore} for the same reason its sibling does: the provider's
- * stale-state failure becomes Spring's {@code OptimisticLockingFailureException} in the interceptor
- * around a {@code @Repository} bean, on the way out of it, so a {@code catch} written inside that
- * bean would never run.
+ * <p>Sits outside {@link NotificationJpaStore}, which only issues statements: what a statement that
+ * matched no row means to the port is decided here.
  *
  * <p>Answers two ports, not one, because both are statements against the same table; the separation
  * that matters is on the calling side, where the reaper holds only {@link AbandonedClaims}.
@@ -42,14 +39,15 @@ class NotificationDispatchAdapter implements NotificationDispatchQueue, Abandone
 
     @Override
     public void recordAttempt(ClaimedNotification claimed, NotificationAttempt attempt) {
-        NotificationEntity entity = NotificationMapper.toEntity(claimed.notification());
         // The version the row carried when it was claimed, not the one it carries now: written
         // against the current value, the guard would pass every time and protect nothing.
-        entity.setVersion(claimed.version());
+        boolean claimHeld =
+                store.recordAttempt(
+                        claimed.notification(),
+                        claimed.version(),
+                        NotificationMapper.toEntity(attempt));
 
-        try {
-            store.recordAttempt(entity, NotificationMapper.toEntity(attempt));
-        } catch (OptimisticLockingFailureException lostRace) {
+        if (!claimHeld) {
             throw new ClaimLostException(claimed.notification().id());
         }
     }

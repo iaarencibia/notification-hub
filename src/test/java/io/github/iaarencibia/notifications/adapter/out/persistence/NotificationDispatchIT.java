@@ -193,6 +193,46 @@ class NotificationDispatchIT extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("writes only the lifecycle columns, leaving what intake fixed as it is in the row")
+    void recordingAnAttemptLeavesIntakeColumnsAlone() {
+        UUID id = insertPending(Priority.MEDIUM, clock.now().minusSeconds(1));
+        ClaimedNotification claimed = queue.claimDue(1, INSTANCE).getFirst();
+        jdbc.update("UPDATE notification SET subject = 'changed in the database' WHERE id = ?", id);
+
+        queue.recordAttempt(claimed, deliver(claimed, new DispatchOutcome.Success(202)));
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT subject FROM notification WHERE id = ?", String.class, id))
+                .isEqualTo("changed in the database");
+        assertThat(statusOf(id)).isEqualTo("SENT");
+        assertThat(versionOf(id)).isEqualTo(claimed.version() + 1);
+    }
+
+    @Test
+    @DisplayName("leaves the row and the attempts untouched when the version no longer matches")
+    void aLostClaimWritesNothing() {
+        UUID id = insertPending(Priority.MEDIUM, clock.now().minusSeconds(1));
+        ClaimedNotification stale = queue.claimDue(1, INSTANCE).getFirst();
+        jdbc.update("UPDATE notification SET version = version + 1 WHERE id = ?", id);
+
+        assertThatExceptionOfType(ClaimLostException.class)
+                .isThrownBy(
+                        () ->
+                                queue.recordAttempt(
+                                        stale, deliver(stale, new DispatchOutcome.Success(202))));
+
+        assertThat(statusOf(id)).isEqualTo("DISPATCHING");
+        assertThat(versionOf(id)).isEqualTo(stale.version() + 1);
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT count(*) FROM notification_attempt WHERE notification_id = ?",
+                                Integer.class,
+                                id))
+                .isZero();
+    }
+
+    @Test
     @DisplayName("returns a claim its owner never came back for")
     void reapsAnAbandonedClaim() {
         UUID abandoned = insertDispatching(clock.now().minusSeconds(600), OTHER_INSTANCE);
@@ -251,6 +291,10 @@ class NotificationDispatchIT extends IntegrationTestSupport {
     private String statusOf(UUID id) {
         return jdbc.queryForObject(
                 "SELECT status FROM notification WHERE id = ?", String.class, id);
+    }
+
+    private long versionOf(UUID id) {
+        return jdbc.queryForObject("SELECT version FROM notification WHERE id = ?", Long.class, id);
     }
 
     /**

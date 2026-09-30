@@ -236,13 +236,4 @@ class NotificationEntity {
     long getVersion() {
         return version;
     }
-
-    /**
-     * @param version the value this row carried when it was claimed. Set on a detached instance
-     *     before it is merged, so the provider can refuse the write if anything else moved the row
-     *     in the meantime
-     */
-    void setVersion(long version) {
-        this.version = version;
-    }
 }
