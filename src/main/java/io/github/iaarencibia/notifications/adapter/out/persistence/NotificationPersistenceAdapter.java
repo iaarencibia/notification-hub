@@ -5,6 +5,7 @@ import io.github.iaarencibia.notifications.application.port.out.NotificationRepo
 import io.github.iaarencibia.notifications.domain.Notification;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
@@ -52,5 +53,10 @@ class NotificationPersistenceAdapter implements NotificationRepository {
         Objects.requireNonNull(idempotencyKey, "idempotencyKey must not be null");
 
         return store.findByIdempotencyKey(idempotencyKey).map(NotificationMapper::toDomain);
+    }
+
+    @Override
+    public Optional<Notification> findById(UUID id) {
+        return store.findById(id).map(NotificationMapper::toDomain);
     }
 }

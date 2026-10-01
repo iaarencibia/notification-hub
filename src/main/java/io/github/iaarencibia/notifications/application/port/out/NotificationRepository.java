@@ -2,6 +2,7 @@ package io.github.iaarencibia.notifications.application.port.out;
 
 import io.github.iaarencibia.notifications.domain.Notification;
 import java.util.Optional;
+import java.util.UUID;
 
 /** What the application needs from storage, said in the language of the domain. */
 public interface NotificationRepository {
@@ -18,4 +19,6 @@ public interface NotificationRepository {
      * @return the notification that key already created, or empty if it is unused
      */
     Optional<Notification> findByIdempotencyKey(String idempotencyKey);
+
+    Optional<Notification> findById(UUID id);
 }

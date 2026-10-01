@@ -5,16 +5,20 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import io.github.iaarencibia.notifications.IntegrationTestSupport;
+import io.github.iaarencibia.notifications.application.port.out.AttemptHistory;
 import io.github.iaarencibia.notifications.application.port.out.IdempotencyKeyAlreadyUsedException;
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
+import io.github.iaarencibia.notifications.domain.AttemptOutcome;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.CorrelationId;
 import io.github.iaarencibia.notifications.domain.Notification;
+import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
 import io.github.iaarencibia.notifications.domain.NotificationStatus;
 import io.github.iaarencibia.notifications.domain.Priority;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +41,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class NotificationRepositoryIT extends IntegrationTestSupport {
 
     @Autowired private NotificationRepository repository;
+
+    @Autowired private AttemptHistory history;
 
     @Autowired private JdbcTemplate jdbc;
 
@@ -235,6 +241,76 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
         assertThat(toTheWarehouse.correlationId()).isEqualTo(sameOperation);
     }
 
+    @Test
+    @DisplayName("finds a notification by its identifier")
+    void findsANotificationById() {
+        Notification submitted =
+                Notification.submit(
+                        UUID.randomUUID(),
+                        payload(),
+                        new CorrelationId("order-4474"),
+                        "key-by-id",
+                        3,
+                        Instant.parse("2026-09-01T14:00:00Z"));
+        repository.save(submitted);
+
+        Notification found = repository.findById(submitted.id()).orElseThrow();
+
+        assertThat(found.id()).isEqualTo(submitted.id());
+        assertThat(found.payload()).isEqualTo(payload());
+        assertThat(found.correlationId()).isEqualTo(new CorrelationId("order-4474"));
+        assertThat(found.createdAt()).isEqualTo(Instant.parse("2026-09-01T14:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("finds nothing for an identifier no notification has")
+    void findsNothingForAnUnknownId() {
+        assertThat(repository.findById(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "lists the attempts of a notification oldest first, whatever order they were stored")
+    void listsAttemptsOldestFirst() {
+        UUID id = insertNotification("key-history");
+        UUID other = insertNotification("key-history-other");
+        insertAttempt(id, 3, "SUCCESS", 202, null, "2026-09-01T10:03:00Z");
+        insertAttempt(
+                id,
+                1,
+                "RETRYABLE_FAILURE",
+                503,
+                "503 from the destination",
+                "2026-09-01T10:01:00Z");
+        insertAttempt(id, 2, "RETRYABLE_FAILURE", null, "timed out", "2026-09-01T10:02:00Z");
+        insertAttempt(other, 1, "SUCCESS", 200, null, "2026-09-01T10:00:00Z");
+
+        List<NotificationAttempt> attempts = history.attemptsOf(id);
+
+        assertThat(attempts)
+                .extracting(NotificationAttempt::attemptNumber)
+                .containsExactly(1, 2, 3);
+        assertThat(attempts)
+                .allSatisfy(attempt -> assertThat(attempt.notificationId()).isEqualTo(id));
+        NotificationAttempt first = attempts.get(0);
+        assertThat(first.channel()).isEqualTo(Channel.SERVICE);
+        assertThat(first.outcome()).isEqualTo(AttemptOutcome.RETRYABLE_FAILURE);
+        assertThat(first.responseCode()).isEqualTo(503);
+        assertThat(first.errorMessage()).isEqualTo("503 from the destination");
+        assertThat(first.startedAt()).isEqualTo(Instant.parse("2026-09-01T10:01:00Z"));
+        assertThat(first.finishedAt()).isEqualTo(Instant.parse("2026-09-01T10:01:05Z"));
+        assertThat(attempts.get(1).responseCode()).isNull();
+        assertThat(attempts.get(2).errorMessage()).isNull();
+    }
+
+    @Test
+    @DisplayName("lists no attempts for a notification that has made none")
+    void listsNoAttemptsForAFreshNotification() {
+        UUID id = insertNotification("key-no-history");
+
+        assertThat(history.attemptsOf(id)).isEmpty();
+    }
+
     private static NotificationPayload payload() {
         return new NotificationPayload(
                 "https://example.test/hook",
@@ -292,6 +368,51 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
                 timestamp(createdAt),
                 timestamp(updatedAt),
                 timestamp(sentAt));
+    }
+
+    private UUID insertNotification(String idempotencyKey) {
+        UUID id = UUID.randomUUID();
+        Instant created = Instant.parse("2026-09-01T09:00:00Z");
+        insertRow(
+                id,
+                idempotencyKey,
+                "order-9003",
+                NotificationStatus.PENDING,
+                0,
+                3,
+                created,
+                created,
+                created,
+                null,
+                null,
+                null,
+                null);
+        return id;
+    }
+
+    private void insertAttempt(
+            UUID notificationId,
+            int number,
+            String outcome,
+            Integer responseCode,
+            String errorMessage,
+            String startedAt) {
+        Instant started = Instant.parse(startedAt);
+        jdbc.update(
+                """
+                INSERT INTO notification_attempt (
+                    id, notification_id, attempt_number, channel, outcome, response_code,
+                    error_message, started_at, finished_at, duration_ms)
+                VALUES (?, ?, ?, 'SERVICE', ?, ?, ?, ?, ?, 5000)
+                """,
+                UUID.randomUUID(),
+                notificationId,
+                number,
+                outcome,
+                responseCode,
+                errorMessage,
+                timestamp(started),
+                timestamp(started.plusSeconds(5)));
     }
 
     private static Timestamp timestamp(Instant instant) {

@@ -454,6 +454,11 @@ class SubmitNotificationServiceTest {
             return hidden ? Optional.empty() : Optional.ofNullable(byKey.get(idempotencyKey));
         }
 
+        @Override
+        public Optional<Notification> findById(UUID id) {
+            return hidden ? Optional.empty() : Optional.ofNullable(byId.get(id));
+        }
+
         /** Leaves the keys taken but the rows unreadable, which is what corruption looks like. */
         void hideEverything() {
             this.hidden = true;
