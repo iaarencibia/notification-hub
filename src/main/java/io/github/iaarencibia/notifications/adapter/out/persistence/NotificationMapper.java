@@ -70,6 +70,19 @@ final class NotificationMapper {
                 attempt.durationMs());
     }
 
+    static NotificationAttempt toDomain(NotificationAttemptEntity entity) {
+        return new NotificationAttempt(
+                entity.getId(),
+                entity.getNotificationId(),
+                entity.getAttemptNumber(),
+                entity.getChannel(),
+                entity.getOutcome(),
+                entity.getResponseCode(),
+                entity.getErrorMessage(),
+                entity.getStartedAt(),
+                entity.getFinishedAt());
+    }
+
     static Notification toDomain(NotificationEntity entity) {
         NotificationPayload payload =
                 new NotificationPayload(

@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -158,6 +159,22 @@ class NotificationJpaStore {
                 .createNativeQuery(CLAIM_DUE, NotificationEntity.class)
                 .setParameter("now", now)
                 .setParameter("batchSize", batchSize)
+                .getResultList();
+    }
+
+    @Transactional(readOnly = true)
+    Optional<NotificationEntity> findById(UUID id) {
+        return Optional.ofNullable(entityManager.find(NotificationEntity.class, id));
+    }
+
+    @Transactional(readOnly = true)
+    List<NotificationAttemptEntity> attemptsOf(UUID notificationId) {
+        return entityManager
+                .createQuery(
+                        "SELECT a FROM NotificationAttemptEntity a "
+                                + "WHERE a.notificationId = :notificationId ORDER BY a.attemptNumber",
+                        NotificationAttemptEntity.class)
+                .setParameter("notificationId", notificationId)
                 .getResultList();
     }
 
