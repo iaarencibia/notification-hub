@@ -21,7 +21,7 @@ import java.lang.annotation.Target;
 @Constraint(validatedBy = NoNulCharacter.Validator.class)
 @Target({FIELD, METHOD, PARAMETER, ANNOTATION_TYPE, RECORD_COMPONENT, TYPE_USE})
 @Retention(RetentionPolicy.RUNTIME)
-@interface NoNulCharacter {
+public @interface NoNulCharacter {
 
     String message() default "must not contain a NUL character";
 

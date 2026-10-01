@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.adapter.in.web;
+package io.github.iaarencibia.notifications.adapter.in.web.submit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -78,7 +78,7 @@ class NotificationIntakeIT extends IntegrationTestSupport {
     void captureTheControllerLog() {
         controllerLogger =
                 (ch.qos.logback.classic.Logger)
-                        LoggerFactory.getLogger(NotificationController.class);
+                        LoggerFactory.getLogger(SubmitNotificationController.class);
         controllerLogger.setLevel(Level.INFO);
         logged.start();
         controllerLogger.addAppender(logged);

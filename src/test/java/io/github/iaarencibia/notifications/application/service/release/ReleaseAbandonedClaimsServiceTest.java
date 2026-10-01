@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.application.service;
+package io.github.iaarencibia.notifications.application.service.release;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;

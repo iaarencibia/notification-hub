@@ -3,8 +3,8 @@ package io.github.iaarencibia.notifications.adapter.in.scheduler;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
-import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
-import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;

@@ -1,5 +1,7 @@
-package io.github.iaarencibia.notifications.adapter.in.web;
+package io.github.iaarencibia.notifications.adapter.in.web.submit;
 
+import io.github.iaarencibia.notifications.adapter.in.web.CharacterLength;
+import io.github.iaarencibia.notifications.adapter.in.web.NoNulCharacter;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
 import io.github.iaarencibia.notifications.domain.Priority;

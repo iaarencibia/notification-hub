@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.application.port.in;
+package io.github.iaarencibia.notifications.application.port.in.release;
 
 /**
  * The recovery pass: returns to PENDING the claims of instances that never came back, since {@code

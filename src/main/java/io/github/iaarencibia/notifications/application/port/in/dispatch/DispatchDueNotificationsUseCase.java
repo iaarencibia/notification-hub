@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.application.port.in;
+package io.github.iaarencibia.notifications.application.port.in.dispatch;
 
 /** One pass of the dispatcher: claims whatever is due and delivers it. */
 public interface DispatchDueNotificationsUseCase {

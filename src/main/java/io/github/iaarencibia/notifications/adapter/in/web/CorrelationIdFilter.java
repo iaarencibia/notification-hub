@@ -19,10 +19,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 // Ahead of the security chain, so its 401 lines carry the id too.
 @Order(Ordered.HIGHEST_PRECEDENCE)
-final class CorrelationIdFilter extends OncePerRequestFilter {
+public final class CorrelationIdFilter extends OncePerRequestFilter {
 
     static final String MDC_KEY = "correlationId";
-    static final String REQUEST_ATTRIBUTE = "notifications.correlationId";
+    public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
+    public static final String REQUEST_ATTRIBUTE = "notifications.correlationId";
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -34,8 +35,7 @@ final class CorrelationIdFilter extends OncePerRequestFilter {
             HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        CorrelationId correlationId =
-                resolve(request.getHeader(NotificationController.CORRELATION_ID_HEADER));
+        CorrelationId correlationId = resolve(request.getHeader(CORRELATION_ID_HEADER));
         if (correlationId == null) {
             // An unvetted value never reaches a log line.
             chain.doFilter(request, response);

@@ -1,7 +1,7 @@
 package io.github.iaarencibia.notifications.adapter.in.scheduler;
 
-import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
-import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.function.IntSupplier;

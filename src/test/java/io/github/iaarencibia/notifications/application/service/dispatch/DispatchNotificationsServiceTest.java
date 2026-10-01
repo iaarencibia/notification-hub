@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.application.service;
+package io.github.iaarencibia.notifications.application.service.dispatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

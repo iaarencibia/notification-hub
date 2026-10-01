@@ -1,6 +1,6 @@
-package io.github.iaarencibia.notifications.application.service;
+package io.github.iaarencibia.notifications.application.service.dispatch;
 
-import io.github.iaarencibia.notifications.application.port.in.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.out.ClaimLostException;
 import io.github.iaarencibia.notifications.application.port.out.ClaimedNotification;
 import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
