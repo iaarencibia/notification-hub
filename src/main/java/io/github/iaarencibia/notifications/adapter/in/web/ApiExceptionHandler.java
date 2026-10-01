@@ -3,6 +3,7 @@ package io.github.iaarencibia.notifications.adapter.in.web;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
+import io.github.iaarencibia.notifications.application.port.in.query.NotificationNotFoundException;
 import io.github.iaarencibia.notifications.application.port.in.submit.IdempotencyKeyReusedException;
 import io.github.iaarencibia.notifications.application.port.in.submit.UnacceptableRecipientException;
 import io.github.iaarencibia.notifications.application.port.in.submit.UndeliverableChannelException;
@@ -13,9 +14,11 @@ import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -185,6 +188,32 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                         HttpHeaders.WWW_AUTHENTICATE,
                         API_KEY_SCHEME + " realm=\"notification-service\"")
                 .body(problem);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(
+            TypeMismatchException exception,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request) {
+
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.BAD_REQUEST, "One or more request parameters are invalid");
+        String reason =
+                exception.getRequiredType() == UUID.class
+                        ? "must be a UUID"
+                        : "is not of the expected type";
+        problem.setProperty("errors", Map.of(String.valueOf(exception.getPropertyName()), reason));
+
+        return handleExceptionInternal(
+                exception, problem, headers, HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(NotificationNotFoundException.class)
+    ProblemDetail handleNotificationNotFound(NotificationNotFoundException exception) {
+        return ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, "No notification exists with the id " + exception.id());
     }
 
     @ExceptionHandler(IdempotencyKeyReusedException.class)
