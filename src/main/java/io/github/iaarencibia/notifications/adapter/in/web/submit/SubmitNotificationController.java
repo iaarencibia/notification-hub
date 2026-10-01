@@ -1,7 +1,9 @@
-package io.github.iaarencibia.notifications.adapter.in.web;
+package io.github.iaarencibia.notifications.adapter.in.web.submit;
 
-import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationCommand;
-import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationUseCase;
+import io.github.iaarencibia.notifications.adapter.in.web.CorrelationIdFilter;
+import io.github.iaarencibia.notifications.adapter.in.web.InvalidRequestException;
+import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationCommand;
+import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.domain.CorrelationId;
 import io.github.iaarencibia.notifications.domain.Notification;
 import jakarta.validation.Valid;
@@ -32,16 +34,15 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping(path = "/api/v1/notifications")
-class NotificationController {
+class SubmitNotificationController {
 
     static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
-    static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
 
-    private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
+    private static final Logger log = LoggerFactory.getLogger(SubmitNotificationController.class);
 
     private final SubmitNotificationUseCase submitNotification;
 
-    NotificationController(SubmitNotificationUseCase submitNotification) {
+    SubmitNotificationController(SubmitNotificationUseCase submitNotification) {
         this.submitNotification = submitNotification;
     }
 
@@ -55,7 +56,8 @@ class NotificationController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<SubmitNotificationResponse> submit(
             @Valid @RequestBody SubmitNotificationRequest request,
-            @RequestHeader(name = CORRELATION_ID_HEADER, required = false) String correlationHeader,
+            @RequestHeader(name = CorrelationIdFilter.CORRELATION_ID_HEADER, required = false)
+                    String correlationHeader,
             @RequestHeader(name = IDEMPOTENCY_KEY_HEADER, required = false) String keyHeader,
             @RequestAttribute(name = CorrelationIdFilter.REQUEST_ATTRIBUTE, required = false)
                     CorrelationId filterCorrelationId) {
@@ -100,7 +102,7 @@ class NotificationController {
             return new CorrelationId(header);
         } catch (IllegalArgumentException rejected) {
             refusals.put(
-                    CORRELATION_ID_HEADER,
+                    CorrelationIdFilter.CORRELATION_ID_HEADER,
                     "must be 1 to "
                             + CorrelationId.MAX_LENGTH
                             + " characters, and may contain "

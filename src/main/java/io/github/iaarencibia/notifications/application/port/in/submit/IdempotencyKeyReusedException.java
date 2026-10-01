@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.application.port.in;
+package io.github.iaarencibia.notifications.application.port.in.submit;
 
 import java.util.UUID;
 

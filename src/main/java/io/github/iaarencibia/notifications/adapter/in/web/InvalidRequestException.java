@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
  * <p>Holds every offending header, not only the first: the body path already reports every field in
  * one round trip, and holding the two paths to different standards would be worse than either.
  */
-class InvalidRequestException extends RuntimeException {
+public class InvalidRequestException extends RuntimeException {
 
     private final Map<String, String> reasonsByHeader;
 
@@ -20,7 +20,7 @@ class InvalidRequestException extends RuntimeException {
      * @param reasonsByHeader what is wrong with each refused header, keyed by the header's name
      *     exactly as it travels on the wire, and phrased for whoever has to fix the caller
      */
-    InvalidRequestException(Map<String, String> reasonsByHeader) {
+    public InvalidRequestException(Map<String, String> reasonsByHeader) {
         // Stored unprefixed: the response already keys each reason under the header name, so
         // repeating it there would stutter. Only this message, seen only by a log, joins name
         // to reason.

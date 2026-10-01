@@ -29,7 +29,7 @@ import java.lang.annotation.Target;
 // otherwise unannotatable.
 @Target({FIELD, METHOD, PARAMETER, ANNOTATION_TYPE, RECORD_COMPONENT, TYPE_USE})
 @Retention(RetentionPolicy.RUNTIME)
-@interface CharacterLength {
+public @interface CharacterLength {
 
     int max();
 

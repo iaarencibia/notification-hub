@@ -1,6 +1,6 @@
-package io.github.iaarencibia.notifications.application.service;
+package io.github.iaarencibia.notifications.application.service.release;
 
-import io.github.iaarencibia.notifications.application.port.in.ReleaseAbandonedClaimsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
 import java.time.Duration;
 import java.util.Objects;

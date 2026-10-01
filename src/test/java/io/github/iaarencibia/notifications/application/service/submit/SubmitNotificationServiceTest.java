@@ -1,14 +1,14 @@
-package io.github.iaarencibia.notifications.application.service;
+package io.github.iaarencibia.notifications.application.service.submit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
-import io.github.iaarencibia.notifications.application.port.in.IdempotencyKeyReusedException;
-import io.github.iaarencibia.notifications.application.port.in.SubmitNotificationCommand;
-import io.github.iaarencibia.notifications.application.port.in.UnacceptableRecipientException;
-import io.github.iaarencibia.notifications.application.port.in.UndeliverableChannelException;
+import io.github.iaarencibia.notifications.application.port.in.submit.IdempotencyKeyReusedException;
+import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationCommand;
+import io.github.iaarencibia.notifications.application.port.in.submit.UnacceptableRecipientException;
+import io.github.iaarencibia.notifications.application.port.in.submit.UndeliverableChannelException;
 import io.github.iaarencibia.notifications.application.port.out.DestinationPolicy;
 import io.github.iaarencibia.notifications.application.port.out.IdempotencyKeyAlreadyUsedException;
 import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;

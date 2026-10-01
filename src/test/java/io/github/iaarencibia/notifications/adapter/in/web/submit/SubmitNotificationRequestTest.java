@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.adapter.in.web;
+package io.github.iaarencibia.notifications.adapter.in.web.submit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

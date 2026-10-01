@@ -1,4 +1,4 @@
-package io.github.iaarencibia.notifications.application.port.in;
+package io.github.iaarencibia.notifications.application.port.in.submit;
 
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.domain.Channel;
