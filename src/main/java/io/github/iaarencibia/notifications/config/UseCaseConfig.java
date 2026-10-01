@@ -3,9 +3,11 @@ package io.github.iaarencibia.notifications.config;
 import io.github.iaarencibia.notifications.adapter.out.observability.CompositeDispatchEvents;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.query.GetNotificationUseCase;
 import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
+import io.github.iaarencibia.notifications.application.port.out.AttemptHistory;
 import io.github.iaarencibia.notifications.application.port.out.DestinationPolicy;
 import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
@@ -14,6 +16,7 @@ import io.github.iaarencibia.notifications.application.port.out.NotificationDisp
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
 import io.github.iaarencibia.notifications.application.service.dispatch.DispatchNotificationsService;
+import io.github.iaarencibia.notifications.application.service.query.GetNotificationService;
 import io.github.iaarencibia.notifications.application.service.release.ReleaseAbandonedClaimsService;
 import io.github.iaarencibia.notifications.application.service.submit.SubmitNotificationService;
 import io.github.iaarencibia.notifications.domain.Channel;
@@ -96,6 +99,12 @@ class UseCaseConfig {
             AbandonedClaims abandonedClaims, NotificationsProperties properties) {
         return new ReleaseAbandonedClaimsService(
                 abandonedClaims, properties.reaper().staleClaimTimeout());
+    }
+
+    @Bean
+    GetNotificationUseCase getNotificationUseCase(
+            NotificationRepository repository, AttemptHistory history) {
+        return new GetNotificationService(repository, history);
     }
 
     /**
