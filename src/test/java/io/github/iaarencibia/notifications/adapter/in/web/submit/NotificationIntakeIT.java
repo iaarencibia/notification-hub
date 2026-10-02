@@ -23,12 +23,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -48,6 +51,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  */
 @SpringBootTest(properties = IntegrationTestSupport.API_KEY_PROPERTY)
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class NotificationIntakeIT extends IntegrationTestSupport {
 
     private static final String PATH = "/api/v1/notifications";
@@ -106,9 +110,9 @@ class NotificationIntakeIT extends IntegrationTestSupport {
         assertThat(line.getFormattedMessage()).isEqualTo("notification accepted");
         assertThat(fieldsOf(line))
                 .containsEntry("notificationId", UUID.fromString(idOf(result)))
-                .containsEntry("correlationId", "order-4471")
                 .containsEntry("channel", Channel.SERVICE)
-                .containsEntry("priority", Priority.HIGH);
+                .containsEntry("priority", Priority.HIGH)
+                .doesNotContainKey("correlationId");
         assertThat(line.getMDCPropertyMap())
                 .as("the filter is wired into the application, ahead of the controller")
                 .containsEntry("correlationId", "order-4471");
@@ -122,8 +126,31 @@ class NotificationIntakeIT extends IntegrationTestSupport {
 
         ILoggingEvent line = logged.list.getFirst();
         Object stored = rowOf("it-logged-generated").get("correlation_id");
-        assertThat(fieldsOf(line)).containsEntry("correlationId", stored);
+        assertThat(fieldsOf(line)).doesNotContainKey("correlationId");
         assertThat(line.getMDCPropertyMap()).containsEntry("correlationId", (String) stored);
+    }
+
+    @Test
+    @DisplayName("writes the acceptance to the console in the structured format, id once")
+    void writesTheAcceptanceToTheConsole(CapturedOutput console) throws Exception {
+        mockMvc.perform(
+                        submit(VALID_BODY)
+                                .header("Idempotency-Key", "it-console")
+                                .header("X-Correlation-Id", "order-console-4471"))
+                .andExpect(status().isAccepted());
+
+        assertThat(console.getAll())
+                .doesNotContain("Duplicate nested pairs")
+                .doesNotContain("failed to append");
+        assertThat(console.getOut().lines().filter(line -> line.contains("notification accepted")))
+                .singleElement()
+                .satisfies(
+                        line -> {
+                            JsonNode json = objectMapper.readTree(line);
+                            assertThat(json.path("correlationId").asText())
+                                    .isEqualTo("order-console-4471");
+                            assertThat(line).containsOnlyOnce("order-console-4471");
+                        });
     }
 
     @Test

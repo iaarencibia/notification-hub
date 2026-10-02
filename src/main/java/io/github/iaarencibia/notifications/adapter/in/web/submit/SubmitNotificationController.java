@@ -78,7 +78,6 @@ class SubmitNotificationController {
 
         log.atInfo()
                 .addKeyValue("notificationId", id)
-                .addKeyValue("correlationId", correlationId.value())
                 .addKeyValue("channel", request.channel())
                 .addKeyValue("priority", request.priority())
                 .setMessage("notification accepted")
