@@ -6,6 +6,9 @@ import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNoti
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.domain.CorrelationId;
 import io.github.iaarencibia.notifications.domain.Notification;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.Map;
 import java.util.TreeMap;
@@ -54,11 +57,22 @@ class SubmitNotificationController {
     @PostMapping(
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Submit a notification for delivery")
+    @ApiResponse(responseCode = "202", description = "Accepted; delivery has not happened yet")
+    @ApiResponse(responseCode = "400", description = "The body or a header is invalid")
+    @ApiResponse(
+            responseCode = "422",
+            description = "The Idempotency-Key was already used for a different notification")
     ResponseEntity<SubmitNotificationResponse> submit(
             @Valid @RequestBody SubmitNotificationRequest request,
-            @RequestHeader(name = CorrelationIdFilter.CORRELATION_ID_HEADER, required = false)
+            @Parameter(description = "Groups the notifications of one operation in the logs")
+                    @RequestHeader(
+                            name = CorrelationIdFilter.CORRELATION_ID_HEADER,
+                            required = false)
                     String correlationHeader,
-            @RequestHeader(name = IDEMPOTENCY_KEY_HEADER, required = false) String keyHeader,
+            @Parameter(description = "Makes a retry of this request create nothing new")
+                    @RequestHeader(name = IDEMPOTENCY_KEY_HEADER, required = false)
+                    String keyHeader,
             @RequestAttribute(name = CorrelationIdFilter.REQUEST_ATTRIBUTE, required = false)
                     CorrelationId filterCorrelationId) {
 

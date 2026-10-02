@@ -1,6 +1,7 @@
 package io.github.iaarencibia.notifications.config;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +31,7 @@ class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             NotificationsProperties properties,
+            @Value("${springdoc.api-docs.enabled:false}") boolean apiDocsEnabled,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver)
             throws Exception {
         // Written by the filter, read back by the chain on every dispatch of the same request.
@@ -38,17 +40,25 @@ class SecurityConfig {
                 new RequestAttributeSecurityContextRepository();
 
         return http.authorizeHttpRequests(
-                        requests ->
-                                requests
-                                        // Matched through the endpoint, not a literal path, so
-                                        // moving the actuator base path cannot silently close the
-                                        // probe the healthcheck polls.
-                                        .requestMatchers(EndpointRequest.to(HealthEndpoint.class))
-                                        .permitAll()
-                                        // Deny by default, the container's own /error dispatch
-                                        // included; what that costs is in the README's trade-offs.
-                                        .anyRequest()
-                                        .authenticated())
+                        requests -> {
+                            // Matched through the endpoint, not a literal path, so moving the
+                            // actuator base path cannot silently close the probe the healthcheck
+                            // polls.
+                            requests.requestMatchers(EndpointRequest.to(HealthEndpoint.class))
+                                    .permitAll();
+                            // Left authenticated when the documentation is off, so these paths
+                            // answer 401 like any other instead of revealing they exist.
+                            if (apiDocsEnabled) {
+                                requests.requestMatchers(
+                                                "/v3/api-docs/**",
+                                                "/swagger-ui/**",
+                                                "/swagger-ui.html")
+                                        .permitAll();
+                            }
+                            // Deny by default, the container's own /error dispatch included; what
+                            // that costs is in the README's trade-offs.
+                            requests.anyRequest().authenticated();
+                        })
                 // Placed before AnonymousAuthenticationFilter, not just before the authorization
                 // filter, so a recognised caller never has an anonymous token written over it.
                 .addFilterBefore(
