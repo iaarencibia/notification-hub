@@ -67,6 +67,14 @@ logging:
     io.github.iaarencibia.notifications: ${LOG_LEVEL_APP:DEBUG}
     org.springframework.web: INFO
 
+springdoc:
+  # Off unless asked for: a public specification would map the API for callers who must not
+  # be able to, which the 401 on every unknown path is there to prevent.
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
+
 management:
   endpoints:
     web:

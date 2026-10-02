@@ -76,6 +76,8 @@ services:
       # Development credential, meant to be rotated per real deployment; kept as a default
       # so the stack starts without any secret provisioning on a clean checkout.
       NOTIFICATIONS_API_KEY: ${NOTIFICATIONS_API_KEY:-local-dev-api-key-change-me}
+      # The demo stack serves Swagger UI; the service itself keeps the documentation off.
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
       LOG_LEVEL_APP: ${LOG_LEVEL_APP:-DEBUG}
       # The demo destination lives on the compose network, at an address the service would refuse.
       SERVICE_CHANNEL_ALLOWED_HOSTS: wiremock

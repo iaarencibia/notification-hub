@@ -5,6 +5,7 @@ import io.github.iaarencibia.notifications.adapter.in.web.NoNulCharacter;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
 import io.github.iaarencibia.notifications.domain.Priority;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -35,11 +36,20 @@ record SubmitNotificationRequest(
                 @NoNulCharacter
                 String subject,
         @NotNull(message = "must be present, though it may be empty")
+                @Schema(description = "May be empty, but not absent")
                 @CharacterLength(max = NotificationPayload.MAX_BODY_LENGTH)
                 @NoNulCharacter
                 String body,
         @NotNull(message = "must be present") Priority priority,
-        @Size(
+        @Schema(
+                        description =
+                                "Optional; absent is read as none. Keys at most "
+                                        + NotificationPayload.MAX_METADATA_KEY_LENGTH
+                                        + " characters, values at most "
+                                        + NotificationPayload.MAX_METADATA_VALUE_LENGTH
+                                        + " characters",
+                        maxProperties = NotificationPayload.MAX_METADATA_ENTRIES)
+                @Size(
                         max = NotificationPayload.MAX_METADATA_ENTRIES,
                         message = "must not exceed {max} entries")
                 Map<
