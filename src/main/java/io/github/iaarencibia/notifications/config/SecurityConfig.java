@@ -56,7 +56,7 @@ class SecurityConfig {
                                         .permitAll();
                             }
                             // Deny by default, the container's own /error dispatch included; what
-                            // that costs is in the README's trade-offs.
+                            // that costs is in ADR 0007.
                             requests.anyRequest().authenticated();
                         })
                 // Placed before AnonymousAuthenticationFilter, not just before the authorization

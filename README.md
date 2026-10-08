@@ -173,6 +173,8 @@ These are deliberate for now. Each record above ends with the steps that would r
   about 20 seconds loses its notifications to `FAILED`.
 - **No circuit breaker.** Every notification spends its own attempts against a destination that
   is down.
+- **A database outage answers `500`.** While PostgreSQL is unreachable the API answers `500`
+  instead of `503` with `Retry-After`, so a caller cannot tell that the failure will pass.
 - **Nothing removes old rows.** The tables grow until a retention job exists.
 - **The credentials in the repository are development values.** A real deployment must replace
   them, and nothing forces it to.
