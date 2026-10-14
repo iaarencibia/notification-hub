@@ -76,6 +76,7 @@ class DispatchWiringTest {
                 new NotificationsProperties.Security("a-key"),
                 new NotificationsProperties.Dispatch(POLL_INTERVAL, BATCH_SIZE, 8, 100),
                 new NotificationsProperties.Reaper(STALE_CLAIM_TIMEOUT, REAPER_INTERVAL),
+                new NotificationsProperties.QueueMetrics(Duration.ofSeconds(5)),
                 new NotificationsProperties.Retry(
                         3, Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                 new NotificationsProperties.Channels(

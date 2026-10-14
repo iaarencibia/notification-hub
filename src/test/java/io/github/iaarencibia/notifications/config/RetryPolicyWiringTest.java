@@ -85,6 +85,7 @@ class RetryPolicyWiringTest {
                 new NotificationsProperties.Security("a-key"),
                 new NotificationsProperties.Dispatch(Duration.ofSeconds(1), 25, 8, 100),
                 new NotificationsProperties.Reaper(Duration.ofMinutes(5), Duration.ofMinutes(1)),
+                new NotificationsProperties.QueueMetrics(Duration.ofSeconds(5)),
                 new NotificationsProperties.Retry(
                         3, initialBackoff, multiplier, maxBackoff, jitter),
                 new NotificationsProperties.Channels(

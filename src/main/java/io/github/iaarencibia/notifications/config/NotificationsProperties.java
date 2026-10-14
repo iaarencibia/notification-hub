@@ -26,6 +26,7 @@ import org.springframework.validation.annotation.Validated;
  * @param security the credentials the intake endpoint requires
  * @param dispatch how often the worker looks for work, and how much of it runs at once
  * @param reaper when a claim is taken to have outlived its owner
+ * @param queueMetrics how often the queue depth gauges are refreshed
  * @param retry the delivery budget a notification is created with, and the schedule its retries
  *     follow
  * @param channels how each delivery channel reaches the outside world
@@ -37,6 +38,7 @@ public record NotificationsProperties(
         @NotNull @Valid Security security,
         @NotNull @Valid Dispatch dispatch,
         @NotNull @Valid Reaper reaper,
+        @NotNull @Valid QueueMetrics queueMetrics,
         @NotNull @Valid Retry retry,
         @NotNull @Valid Channels channels) {
 
@@ -79,6 +81,17 @@ public record NotificationsProperties(
         public Reaper {
             requirePositive(staleClaimTimeout, "staleClaimTimeout");
             requirePositive(interval, "interval");
+        }
+    }
+
+    /**
+     * @param refreshInterval how often the queue depth is read from the database. The scrape only
+     *     reads the last value read, so this bounds how stale a gauge can be
+     */
+    public record QueueMetrics(@NotNull Duration refreshInterval) {
+
+        public QueueMetrics {
+            requirePositive(refreshInterval, "refreshInterval");
         }
     }
 

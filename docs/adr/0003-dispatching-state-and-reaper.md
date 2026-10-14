@@ -74,9 +74,9 @@ How it is applied:
 - The reaper runs every `notifications.reaper.interval`, one minute by default. It is one `UPDATE`
   that sets such rows back to `PENDING`, clears `claimed_at` and `claimed_by`, and adds one to
   `version`. A partial index on `claimed_at` for `DISPATCHING` rows keeps the lookup small.
-- The reaper has its own scheduler thread (`spring.task.scheduling.pool.size` is 2). On a single
-  shared thread, a saturated dispatch pass would delay recovery at the moment claims are being
-  abandoned.
+- The reaper has its own scheduler thread (`spring.task.scheduling.pool.size` is 3: dispatch,
+  reaper and queue depth refresh). On a single shared thread, a saturated dispatch pass would
+  delay recovery at the moment claims are being abandoned.
 - The reaper and the claim both read the clock from PostgreSQL, so a difference between instance
   clocks cannot make a claim look older or younger than it is.
 - A reaper pass that releases rows logs a warning and increments the

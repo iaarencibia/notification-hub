@@ -1,6 +1,7 @@
 package io.github.iaarencibia.notifications.adapter.in.scheduler;
 
 import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.observe.ObserveQueueDepthUseCase;
 import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -24,7 +25,8 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
  *
  * <p>Fixed delay, not fixed rate: the next pass starts after the previous one returns, so a slow
  * pass delays the next instead of overlapping it. Each pass gets its own thread ({@code
- * spring.task.scheduling.pool.size}), so a saturated dispatch pass cannot also stall the reaper.
+ * spring.task.scheduling.pool.size}), so a saturated dispatch pass cannot also stall the reaper or
+ * the queue depth refresh.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -42,16 +44,19 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
 
     private final DispatchDueNotificationsUseCase dispatchDueNotifications;
     private final ReleaseAbandonedClaimsUseCase releaseAbandonedClaims;
+    private final ObserveQueueDepthUseCase observeQueueDepth;
     private final NotificationsProperties properties;
     private final MeterRegistry registry;
 
     DispatchSchedulerConfig(
             DispatchDueNotificationsUseCase dispatchDueNotifications,
             ReleaseAbandonedClaimsUseCase releaseAbandonedClaims,
+            ObserveQueueDepthUseCase observeQueueDepth,
             NotificationsProperties properties,
             MeterRegistry registry) {
         this.dispatchDueNotifications = dispatchDueNotifications;
         this.releaseAbandonedClaims = releaseAbandonedClaims;
+        this.observeQueueDepth = observeQueueDepth;
         this.properties = properties;
         this.registry = registry;
     }
@@ -60,6 +65,8 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
     public void configureTasks(ScheduledTaskRegistrar registrar) {
         registrar.addFixedDelayTask(this::pollForDueWork, properties.dispatch().pollInterval());
         registrar.addFixedDelayTask(this::recoverAbandonedWork, properties.reaper().interval());
+        registrar.addFixedDelayTask(
+                this::refreshQueueDepth, properties.queueMetrics().refreshInterval());
     }
 
     private void pollForDueWork() {
@@ -74,6 +81,19 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
             // says an instance died mid-delivery and those notifications may be delivered twice.
             log.warn("released {} abandoned claims", released);
         }
+    }
+
+    private void refreshQueueDepth() {
+        run("queue depth", observeQueueDepth::observeQueueDepth);
+    }
+
+    private void run(String pass, Runnable work) {
+        run(
+                pass,
+                () -> {
+                    work.run();
+                    return 0;
+                });
     }
 
     // Keeps the timer alive across a failed pass: a briefly unreachable database must not end

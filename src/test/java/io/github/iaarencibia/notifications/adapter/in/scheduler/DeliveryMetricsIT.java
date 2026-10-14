@@ -4,11 +4,13 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.iaarencibia.notifications.IntegrationTestSupport;
 import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.observe.ObserveQueueDepthUseCase;
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationCommand;
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationUseCase;
 import io.github.iaarencibia.notifications.domain.Channel;
@@ -49,6 +51,8 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
     @Autowired private SubmitNotificationUseCase intake;
 
     @Autowired private DispatchDueNotificationsUseCase dispatcher;
+
+    @Autowired private ObserveQueueDepthUseCase queueDepth;
 
     @Autowired private JdbcTemplate jdbc;
 
@@ -102,6 +106,20 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
                 "channel=\"SERVICE\"",
                 "outcome=\"PERMANENT_FAILURE\"");
         awaitSample("notifications_settled_total", "channel=\"SERVICE\"", "result=\"failed\"");
+    }
+
+    @Test
+    @DisplayName("exports the rows waiting and in flight, read from the database on a refresh")
+    void exportsTheQueueDepth() throws Exception {
+        submitTo("/hook/waiting");
+        submitTo("/hook/waiting");
+
+        queueDepth.observeQueueDepth();
+
+        assertThat(samples(scrape(), "notifications_queue_rows", "status=\"PENDING\""))
+                .containsExactly(2.0);
+        assertThat(samples(scrape(), "notifications_queue_rows", "status=\"DISPATCHING\""))
+                .containsExactly(0.0);
     }
 
     private void awaitSample(String metric, String... labels) throws Exception {
