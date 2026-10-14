@@ -5,8 +5,10 @@ import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +50,13 @@ class NotificationJpaStore {
                    updated_at = now(), version = version + 1
              WHERE status = 'DISPATCHING'
                AND claimed_at < now() - make_interval(secs => :seconds)
+            """;
+
+    private static final String QUEUE_DEPTH =
+            """
+            SELECT status, count(*) FROM notification
+             WHERE status IN ('PENDING', 'DISPATCHING')
+             GROUP BY status
             """;
 
     private static final String RECORD_LIFECYCLE =
@@ -140,6 +149,22 @@ class NotificationJpaStore {
                 .createNativeQuery(RELEASE_STALE_CLAIMS)
                 .setParameter("seconds", (double) staleAfter.toMillis() / 1000)
                 .executeUpdate();
+    }
+
+    /**
+     * Counts only the two statuses that are the queue: settled rows grow without bound and are
+     * never scanned.
+     *
+     * @return the count per status name; a status with no rows is absent
+     */
+    @Transactional(readOnly = true)
+    Map<String, Long> countQueued() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery(QUEUE_DEPTH).getResultList();
+        return rows.stream()
+                .collect(
+                        Collectors.toMap(
+                                row -> (String) row[0], row -> ((Number) row[1]).longValue()));
     }
 
     /**

@@ -35,11 +35,11 @@ spring:
 
   task:
     scheduling:
-      # Two, so the reaper has a thread of its own. On the default of one it shares with the
-      # dispatch pass, and a saturated pass runs deliveries on that thread -- which would stall
+      # Three, so the reaper and the queue depth refresh each have a thread of their own. On a
+      # shared one, a saturated dispatch pass runs deliveries on that thread -- which would stall
       # the recovery of abandoned claims at exactly the moment claims are being abandoned.
       pool:
-        size: 2
+        size: 3
 
 server:
   port: ${SERVER_PORT:8080}
@@ -132,6 +132,9 @@ notifications:
     # that died mid-dispatch, and is returned to PENDING.
     stale-claim-timeout: ${REAPER_STALE_CLAIM_TIMEOUT:5m}
     interval: ${REAPER_INTERVAL:1m}
+
+  queue-metrics:
+    refresh-interval: ${QUEUE_METRICS_REFRESH_INTERVAL:5s}
 
   retry:
     max-attempts: ${RETRY_MAX_ATTEMPTS:3}

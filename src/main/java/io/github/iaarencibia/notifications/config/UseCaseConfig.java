@@ -3,6 +3,7 @@ package io.github.iaarencibia.notifications.config;
 import io.github.iaarencibia.notifications.adapter.out.observability.CompositeDispatchEvents;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.observe.ObserveQueueDepthUseCase;
 import io.github.iaarencibia.notifications.application.port.in.query.GetNotificationUseCase;
 import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationUseCase;
@@ -14,8 +15,11 @@ import io.github.iaarencibia.notifications.application.port.out.IntakeEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
 import io.github.iaarencibia.notifications.application.port.out.NotificationRepository;
+import io.github.iaarencibia.notifications.application.port.out.QueueDepthEvents;
+import io.github.iaarencibia.notifications.application.port.out.QueueInspection;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
 import io.github.iaarencibia.notifications.application.service.dispatch.DispatchNotificationsService;
+import io.github.iaarencibia.notifications.application.service.observe.ObserveQueueDepthService;
 import io.github.iaarencibia.notifications.application.service.query.GetNotificationService;
 import io.github.iaarencibia.notifications.application.service.release.ReleaseAbandonedClaimsService;
 import io.github.iaarencibia.notifications.application.service.submit.SubmitNotificationService;
@@ -99,6 +103,12 @@ class UseCaseConfig {
             AbandonedClaims abandonedClaims, NotificationsProperties properties) {
         return new ReleaseAbandonedClaimsService(
                 abandonedClaims, properties.reaper().staleClaimTimeout());
+    }
+
+    @Bean
+    ObserveQueueDepthUseCase observeQueueDepthUseCase(
+            QueueInspection queue, QueueDepthEvents events) {
+        return new ObserveQueueDepthService(queue, events);
     }
 
     @Bean

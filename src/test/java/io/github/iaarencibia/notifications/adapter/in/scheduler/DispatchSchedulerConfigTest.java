@@ -8,6 +8,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
+import io.github.iaarencibia.notifications.application.port.in.observe.ObserveQueueDepthUseCase;
 import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -31,9 +32,11 @@ class DispatchSchedulerConfigTest {
 
     private static final Duration POLL_INTERVAL = Duration.ofSeconds(1);
     private static final Duration REAPER_INTERVAL = Duration.ofMinutes(1);
+    private static final Duration QUEUE_REFRESH_INTERVAL = Duration.ofSeconds(5);
 
     private final CountingDispatcher dispatcher = new CountingDispatcher();
     private final CountingReaper reaper = new CountingReaper();
+    private final CountingObserver observer = new CountingObserver();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final ScheduledTaskRegistrar schedule = configuredRegistrar();
     private final ListAppender<ILoggingEvent> captured = new ListAppender<>();
@@ -54,21 +57,21 @@ class DispatchSchedulerConfigTest {
     }
 
     @Test
-    @DisplayName("registers both passes, each at its own configured interval")
-    void registersBothPasses() {
+    @DisplayName("registers all three passes, each at its own configured interval")
+    void registersAllPasses() {
         ScheduledTaskRegistrar registrar = configuredRegistrar();
 
         assertThat(registrar.getFixedDelayTaskList())
-                .as("a dispatcher with no reaper never recovers the work of an instance that died")
-                .hasSize(2);
+                .as("a missing pass is either no dispatching, no recovery or no queue depth")
+                .hasSize(3);
         assertThat(
                         registrar.getFixedDelayTaskList().stream()
                                 .map(task -> task.getIntervalDuration()))
-                .containsExactly(POLL_INTERVAL, REAPER_INTERVAL);
+                .containsExactly(POLL_INTERVAL, REAPER_INTERVAL, QUEUE_REFRESH_INTERVAL);
     }
 
     @Test
-    @DisplayName("the passes it registers are the dispatch and the reaper, in that order")
+    @DisplayName("the passes it registers are dispatch, reaper and queue refresh, in that order")
     void registersTheRightPasses() {
         // Asserted by running them, because the intervals alone would still match if both tasks
         // called the same use case twice.
@@ -80,6 +83,10 @@ class DispatchSchedulerConfigTest {
 
         registrar.getFixedDelayTaskList().get(1).getRunnable().run();
         assertThat(reaper.passes).isEqualTo(1);
+        assertThat(observer.passes).isZero();
+
+        registrar.getFixedDelayTaskList().get(2).getRunnable().run();
+        assertThat(observer.passes).isEqualTo(1);
     }
 
     @Test
@@ -95,6 +102,22 @@ class DispatchSchedulerConfigTest {
 
         assertThatCode(() -> registrar.getFixedDelayTaskList().getFirst().getRunnable().run())
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("a queue depth refresh that fails does not escape, so the timer survives it")
+    void aFailedRefreshDoesNotEndTheSchedule() {
+        observer.failing = true;
+
+        assertThatCode(
+                        () ->
+                                configuredRegistrar()
+                                        .getFixedDelayTaskList()
+                                        .get(2)
+                                        .getRunnable()
+                                        .run())
+                .doesNotThrowAnyException();
+        assertThat(observer.passes).isEqualTo(1);
     }
 
     @Test
@@ -175,6 +198,22 @@ class DispatchSchedulerConfigTest {
     }
 
     @Test
+    @DisplayName("tracks each pass on its own: one pass failing does not change what another logs")
+    void tracksEachPassIndependently() {
+        dispatcher.failing = true;
+        runDispatch();
+        captured.list.clear();
+        observer.failing = true;
+
+        runPass(2);
+
+        assertThat(captured.list).hasSize(1);
+        ILoggingEvent event = captured.list.getFirst();
+        assertThat(event.getLevel()).isEqualTo(Level.WARN);
+        assertThat(event.getFormattedMessage()).startsWith("the queue depth pass failed");
+    }
+
+    @Test
     @DisplayName("tracks the reaper separately from the dispatcher")
     void tracksTheReaperSeparately() {
         dispatcher.failing = true;
@@ -225,6 +264,7 @@ class DispatchSchedulerConfigTest {
                 .withUserConfiguration(DispatchSchedulerConfig.class)
                 .withBean(DispatchDueNotificationsUseCase.class, () -> dispatcher)
                 .withBean(ReleaseAbandonedClaimsUseCase.class, () -> reaper)
+                .withBean(ObserveQueueDepthUseCase.class, () -> observer)
                 .withBean(MeterRegistry.class, () -> registry)
                 .withBean(NotificationsProperties.class, DispatchSchedulerConfigTest::properties);
     }
@@ -249,6 +289,7 @@ class DispatchSchedulerConfigTest {
                             return 0;
                         },
                         reaper,
+                        observer,
                         properties(),
                         registry);
 
@@ -258,7 +299,7 @@ class DispatchSchedulerConfigTest {
     }
 
     /**
-     * @return a complete configuration whose two intervals differ, so a task registered with the
+     * @return a complete configuration whose three intervals differ, so a task registered with the
      *     wrong one is visible
      */
     private static NotificationsProperties properties() {
@@ -267,6 +308,7 @@ class DispatchSchedulerConfigTest {
                 new NotificationsProperties.Security("a-key"),
                 new NotificationsProperties.Dispatch(POLL_INTERVAL, 25, 8, 100),
                 new NotificationsProperties.Reaper(Duration.ofMinutes(5), REAPER_INTERVAL),
+                new NotificationsProperties.QueueMetrics(QUEUE_REFRESH_INTERVAL),
                 new NotificationsProperties.Retry(
                         3, Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.2),
                 new NotificationsProperties.Channels(
@@ -302,6 +344,20 @@ class DispatchSchedulerConfigTest {
                 throw new IllegalStateException("the database is unreachable");
             }
             return releasing;
+        }
+    }
+
+    private static final class CountingObserver implements ObserveQueueDepthUseCase {
+
+        private int passes;
+        private boolean failing;
+
+        @Override
+        public void observeQueueDepth() {
+            passes++;
+            if (failing) {
+                throw new IllegalStateException("the database is unreachable");
+            }
         }
     }
 }

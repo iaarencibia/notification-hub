@@ -8,6 +8,8 @@ import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
 import io.github.iaarencibia.notifications.application.port.out.ClaimLostException;
 import io.github.iaarencibia.notifications.application.port.out.ClaimedNotification;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
+import io.github.iaarencibia.notifications.application.port.out.QueueDepth;
+import io.github.iaarencibia.notifications.application.port.out.QueueInspection;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
 import io.github.iaarencibia.notifications.domain.AttemptOutcome;
 import io.github.iaarencibia.notifications.domain.Channel;
@@ -52,6 +54,8 @@ class NotificationDispatchIT extends IntegrationTestSupport {
     @Autowired private NotificationDispatchQueue queue;
 
     @Autowired private AbandonedClaims abandonedClaims;
+
+    @Autowired private QueueInspection queueInspection;
 
     @Autowired private SystemClock clock;
 
@@ -275,6 +279,39 @@ class NotificationDispatchIT extends IntegrationTestSupport {
         long secondClaim = queue.claimDue(1, OTHER_INSTANCE).getFirst().version();
 
         assertThat(secondClaim).isGreaterThan(firstClaim);
+    }
+
+    @Test
+    @DisplayName("counts the rows waiting and the rows in flight, each under its own status")
+    void countsTheQueue() {
+        Instant now = clock.now();
+        insertPending(Priority.LOW, now);
+        insertPending(Priority.HIGH, now);
+        insertPending(Priority.MEDIUM, now);
+        insertDispatching(now, OTHER_INSTANCE);
+
+        assertThat(queueInspection.measure()).isEqualTo(new QueueDepth(3, 1));
+    }
+
+    @Test
+    @DisplayName("reports zero for a status that has no rows, instead of leaving it out")
+    void countsAnEmptyStatusAsZero() {
+        assertThat(queueInspection.measure()).isEqualTo(new QueueDepth(0, 0));
+
+        insertPending(Priority.MEDIUM, clock.now());
+
+        assertThat(queueInspection.measure()).isEqualTo(new QueueDepth(1, 0));
+    }
+
+    @Test
+    @DisplayName("leaves the settled rows out of the count")
+    void doesNotCountSettledRows() {
+        Instant now = clock.now();
+        insert(NotificationStatus.SENT, Priority.MEDIUM, now, null, null);
+        insert(NotificationStatus.FAILED, Priority.MEDIUM, now, null, null);
+        insertPending(Priority.MEDIUM, now);
+
+        assertThat(queueInspection.measure()).isEqualTo(new QueueDepth(1, 0));
     }
 
     /** The attempt the aggregate produces, so the test writes what production writes. */

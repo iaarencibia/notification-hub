@@ -4,9 +4,13 @@ import io.github.iaarencibia.notifications.application.port.out.AbandonedClaims;
 import io.github.iaarencibia.notifications.application.port.out.ClaimLostException;
 import io.github.iaarencibia.notifications.application.port.out.ClaimedNotification;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
+import io.github.iaarencibia.notifications.application.port.out.QueueDepth;
+import io.github.iaarencibia.notifications.application.port.out.QueueInspection;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
+import io.github.iaarencibia.notifications.domain.NotificationStatus;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,11 +19,13 @@ import org.springframework.stereotype.Component;
  * <p>Sits outside {@link NotificationJpaStore}, which only issues statements: what a statement that
  * matched no row means to the port is decided here.
  *
- * <p>Answers two ports, not one, because both are statements against the same table; the separation
- * that matters is on the calling side, where the reaper holds only {@link AbandonedClaims}.
+ * <p>Answers three ports, not one, because all are statements against the same table; the
+ * separation that matters is on the calling side, where the reaper holds only {@link
+ * AbandonedClaims}.
  */
 @Component
-class NotificationDispatchAdapter implements NotificationDispatchQueue, AbandonedClaims {
+class NotificationDispatchAdapter
+        implements NotificationDispatchQueue, AbandonedClaims, QueueInspection {
 
     private final NotificationJpaStore store;
 
@@ -55,5 +61,13 @@ class NotificationDispatchAdapter implements NotificationDispatchQueue, Abandone
     @Override
     public int release(Duration staleAfter) {
         return store.releaseStaleClaims(staleAfter);
+    }
+
+    @Override
+    public QueueDepth measure() {
+        Map<String, Long> counts = store.countQueued();
+        return new QueueDepth(
+                counts.getOrDefault(NotificationStatus.PENDING.name(), 0L),
+                counts.getOrDefault(NotificationStatus.DISPATCHING.name(), 0L));
     }
 }

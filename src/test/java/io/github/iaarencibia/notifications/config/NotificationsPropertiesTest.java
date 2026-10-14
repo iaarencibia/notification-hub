@@ -46,6 +46,9 @@ class NotificationsPropertiesTest {
     private static final String[] VALID_REAPER = {
         "notifications.reaper.stale-claim-timeout=5m", "notifications.reaper.interval=1m"
     };
+    private static final String[] VALID_QUEUE_METRICS = {
+        "notifications.queue-metrics.refresh-interval=5s"
+    };
     private static final String[] VALID_RETRY = {
         "notifications.retry.max-attempts=3",
         "notifications.retry.initial-backoff=5s",
@@ -84,6 +87,9 @@ class NotificationsPropertiesTest {
                             assertThat(properties.reaper().interval())
                                     .isEqualTo(Duration.ofMinutes(1));
 
+                            assertThat(properties.queueMetrics().refreshInterval())
+                                    .isEqualTo(Duration.ofSeconds(5));
+
                             assertThat(properties.retry().maxAttempts()).isEqualTo(3);
                             assertThat(properties.retry().initialBackoff())
                                     .isEqualTo(Duration.ofSeconds(5));
@@ -119,7 +125,13 @@ class NotificationsPropertiesTest {
     @Test
     @DisplayName("refuses to start when the channel timeouts are absent altogether")
     void rejectsMissingChannelsBlock() {
-        runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_REAPER, VALID_RETRY)
+        runnerWith(
+                        VALID_INSTANCE_ID,
+                        VALID_SECURITY,
+                        VALID_DISPATCH,
+                        VALID_REAPER,
+                        VALID_QUEUE_METRICS,
+                        VALID_RETRY)
                 .run(failsOn("channels", NotNull.class));
     }
 
@@ -139,7 +151,13 @@ class NotificationsPropertiesTest {
     void rejectsAHalfConfiguredChannel() {
         // The positivity guard skips a null and leaves it to @NotNull; swapping that condition
         // would let a half-configured channel bind, turning the missing timeout into "no timeout".
-        runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_REAPER, VALID_RETRY)
+        runnerWith(
+                        VALID_INSTANCE_ID,
+                        VALID_SECURITY,
+                        VALID_DISPATCH,
+                        VALID_REAPER,
+                        VALID_QUEUE_METRICS,
+                        VALID_RETRY)
                 .withPropertyValues("notifications.channels.service.connect-timeout=2s")
                 .run(failsOn("readTimeout", NotNull.class));
     }
@@ -187,7 +205,13 @@ class NotificationsPropertiesTest {
     @Test
     @DisplayName("refuses to start when the security block is absent altogether")
     void rejectsMissingSecurityBlock() {
-        runnerWith(VALID_INSTANCE_ID, VALID_DISPATCH, VALID_REAPER, VALID_RETRY, VALID_CHANNELS)
+        runnerWith(
+                        VALID_INSTANCE_ID,
+                        VALID_DISPATCH,
+                        VALID_REAPER,
+                        VALID_QUEUE_METRICS,
+                        VALID_RETRY,
+                        VALID_CHANNELS)
                 .run(failsOn("security", NotNull.class));
     }
 
@@ -205,14 +229,26 @@ class NotificationsPropertiesTest {
     @Test
     @DisplayName("refuses to start when the retry block is absent altogether")
     void rejectsMissingRetryBlock() {
-        runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_REAPER, VALID_CHANNELS)
+        runnerWith(
+                        VALID_INSTANCE_ID,
+                        VALID_SECURITY,
+                        VALID_DISPATCH,
+                        VALID_REAPER,
+                        VALID_QUEUE_METRICS,
+                        VALID_CHANNELS)
                 .run(failsOn("retry", NotNull.class));
     }
 
     @Test
     @DisplayName("refuses to start when the dispatch block is absent altogether")
     void rejectsMissingDispatchBlock() {
-        runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_REAPER, VALID_RETRY, VALID_CHANNELS)
+        runnerWith(
+                        VALID_INSTANCE_ID,
+                        VALID_SECURITY,
+                        VALID_REAPER,
+                        VALID_QUEUE_METRICS,
+                        VALID_RETRY,
+                        VALID_CHANNELS)
                 .run(failsOn("dispatch", NotNull.class));
     }
 
@@ -249,7 +285,13 @@ class NotificationsPropertiesTest {
     @Test
     @DisplayName("refuses to start when the reaper block is absent altogether")
     void rejectsMissingReaperBlock() {
-        runnerWith(VALID_INSTANCE_ID, VALID_SECURITY, VALID_DISPATCH, VALID_RETRY, VALID_CHANNELS)
+        runnerWith(
+                        VALID_INSTANCE_ID,
+                        VALID_SECURITY,
+                        VALID_DISPATCH,
+                        VALID_QUEUE_METRICS,
+                        VALID_RETRY,
+                        VALID_CHANNELS)
                 .run(failsOn("reaper", NotNull.class));
     }
 
@@ -272,6 +314,27 @@ class NotificationsPropertiesTest {
                 .run(failsNaming("interval", "must be positive"));
     }
 
+    @Test
+    @DisplayName("refuses to start when the queue metrics block is absent altogether")
+    void rejectsMissingQueueMetricsBlock() {
+        runnerWith(
+                        VALID_INSTANCE_ID,
+                        VALID_SECURITY,
+                        VALID_DISPATCH,
+                        VALID_REAPER,
+                        VALID_RETRY,
+                        VALID_CHANNELS)
+                .run(failsOn("queueMetrics", NotNull.class));
+    }
+
+    @Test
+    @DisplayName("refuses to start on a queue metrics refresh interval of zero")
+    void rejectsANonPositiveQueueRefreshInterval() {
+        complete()
+                .withPropertyValues("notifications.queue-metrics.refresh-interval=0s")
+                .run(failsNaming("refreshInterval", "must be positive"));
+    }
+
     private static String instanceIdOf(int length) {
         return "notifications.instance-id=" + "x".repeat(length);
     }
@@ -286,6 +349,7 @@ class NotificationsPropertiesTest {
                 VALID_SECURITY,
                 VALID_DISPATCH,
                 VALID_REAPER,
+                VALID_QUEUE_METRICS,
                 VALID_RETRY,
                 VALID_CHANNELS);
     }
