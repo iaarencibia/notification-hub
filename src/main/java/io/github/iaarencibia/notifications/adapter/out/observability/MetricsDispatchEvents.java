@@ -19,7 +19,10 @@ final class MetricsDispatchEvents implements DispatchEvents {
     }
 
     @Override
-    public void claimed(Notification notification) {}
+    public void claimed(Notification notification) {
+        registry.counter("notifications.claims", "channel", notification.payload().channel().name())
+                .increment();
+    }
 
     @Override
     public void dispatched(Notification notification, NotificationAttempt attempt) {

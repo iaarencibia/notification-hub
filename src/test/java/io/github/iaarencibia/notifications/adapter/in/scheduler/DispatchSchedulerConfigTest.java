@@ -3,6 +3,10 @@ package io.github.iaarencibia.notifications.adapter.in.scheduler;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
@@ -10,8 +14,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
@@ -28,6 +35,23 @@ class DispatchSchedulerConfigTest {
     private final CountingDispatcher dispatcher = new CountingDispatcher();
     private final CountingReaper reaper = new CountingReaper();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    private final ScheduledTaskRegistrar schedule = configuredRegistrar();
+    private final ListAppender<ILoggingEvent> captured = new ListAppender<>();
+    private Logger logger;
+
+    @BeforeEach
+    void captureTheLogger() {
+        logger = (Logger) LoggerFactory.getLogger(DispatchSchedulerConfig.class);
+        logger.setLevel(Level.DEBUG);
+        captured.start();
+        logger.addAppender(captured);
+    }
+
+    @AfterEach
+    void releaseTheLogger() {
+        logger.detachAppender(captured);
+        captured.stop();
+    }
 
     @Test
     @DisplayName("registers both passes, each at its own configured interval")
@@ -74,6 +98,98 @@ class DispatchSchedulerConfigTest {
     }
 
     @Test
+    @DisplayName("logs the first failure of a pass at WARN, with the stack trace")
+    void logsTheFirstFailureWithItsStackTrace() {
+        dispatcher.failing = true;
+
+        runDispatch();
+
+        assertThat(captured.list).hasSize(1);
+        ILoggingEvent event = captured.list.getFirst();
+        assertThat(event.getLevel()).isEqualTo(Level.WARN);
+        assertThat(event.getFormattedMessage())
+                .isEqualTo("the dispatch pass failed and will be retried on the next tick");
+        assertThat(event.getThrowableProxy()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("logs a consecutive failure at DEBUG, without a stack trace")
+    void logsAConsecutiveFailureQuietly() {
+        dispatcher.failing = true;
+        runDispatch();
+        captured.list.clear();
+
+        runDispatch();
+
+        assertThat(captured.list).hasSize(1);
+        ILoggingEvent event = captured.list.getFirst();
+        assertThat(event.getLevel()).isEqualTo(Level.DEBUG);
+        assertThat(event.getFormattedMessage())
+                .isEqualTo(
+                        "the dispatch pass is still failing:"
+                                + " java.lang.IllegalStateException: the database is unreachable");
+        assertThat(event.getThrowableProxy()).isNull();
+    }
+
+    @Test
+    @DisplayName("logs the first success after failures at INFO, once")
+    void logsTheRecoveryOnce() {
+        dispatcher.failing = true;
+        runDispatch();
+        runDispatch();
+        captured.list.clear();
+        dispatcher.failing = false;
+
+        runDispatch();
+        runDispatch();
+
+        assertThat(captured.list).hasSize(1);
+        ILoggingEvent event = captured.list.getFirst();
+        assertThat(event.getLevel()).isEqualTo(Level.INFO);
+        assertThat(event.getFormattedMessage()).isEqualTo("the dispatch pass recovered");
+    }
+
+    @Test
+    @DisplayName("warns again when a pass fails after having recovered")
+    void warnsAgainAfterARecovery() {
+        dispatcher.failing = true;
+        runDispatch();
+        dispatcher.failing = false;
+        runDispatch();
+        captured.list.clear();
+        dispatcher.failing = true;
+
+        runDispatch();
+
+        assertThat(captured.list).hasSize(1);
+        assertThat(captured.list.getFirst().getLevel()).isEqualTo(Level.WARN);
+    }
+
+    @Test
+    @DisplayName("logs nothing extra for a pass that never failed")
+    void logsNothingForAHealthyPass() {
+        runDispatch();
+        runDispatch();
+
+        assertThat(captured.list).isEmpty();
+    }
+
+    @Test
+    @DisplayName("tracks the reaper separately from the dispatcher")
+    void tracksTheReaperSeparately() {
+        dispatcher.failing = true;
+        runDispatch();
+        captured.list.clear();
+        reaper.failing = true;
+
+        runPass(1);
+
+        assertThat(captured.list).hasSize(1);
+        assertThat(captured.list.getFirst().getLevel()).isEqualTo(Level.WARN);
+        assertThat(captured.list.getFirst().getFormattedMessage()).startsWith("the reaper pass");
+    }
+
+    @Test
     @DisplayName("counts the claims the reaper released")
     void countsReleasedClaims() {
         reaper.releasing = 3;
@@ -111,6 +227,14 @@ class DispatchSchedulerConfigTest {
                 .withBean(ReleaseAbandonedClaimsUseCase.class, () -> reaper)
                 .withBean(MeterRegistry.class, () -> registry)
                 .withBean(NotificationsProperties.class, DispatchSchedulerConfigTest::properties);
+    }
+
+    private void runDispatch() {
+        runPass(0);
+    }
+
+    private void runPass(int index) {
+        schedule.getFixedDelayTaskList().get(index).getRunnable().run();
     }
 
     private ScheduledTaskRegistrar configuredRegistrar() {
@@ -153,10 +277,14 @@ class DispatchSchedulerConfigTest {
     private static final class CountingDispatcher implements DispatchDueNotificationsUseCase {
 
         private int passes;
+        private boolean failing;
 
         @Override
         public int dispatchDue() {
             passes++;
+            if (failing) {
+                throw new IllegalStateException("the database is unreachable");
+            }
             return 0;
         }
     }
@@ -165,10 +293,14 @@ class DispatchSchedulerConfigTest {
 
         private int passes;
         private int releasing;
+        private boolean failing;
 
         @Override
         public int releaseAbandonedClaims() {
             passes++;
+            if (failing) {
+                throw new IllegalStateException("the database is unreachable");
+            }
             return releasing;
         }
     }

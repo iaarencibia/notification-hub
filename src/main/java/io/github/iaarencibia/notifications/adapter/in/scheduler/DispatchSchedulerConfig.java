@@ -4,6 +4,8 @@ import io.github.iaarencibia.notifications.application.port.in.dispatch.Dispatch
 import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +36,9 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 class DispatchSchedulerConfig implements SchedulingConfigurer {
 
     private static final Logger log = LoggerFactory.getLogger(DispatchSchedulerConfig.class);
+
+    // Logged on the edge: with the database down, every tick would otherwise add a stack trace.
+    private final Set<String> failingPasses = ConcurrentHashMap.newKeySet();
 
     private final DispatchDueNotificationsUseCase dispatchDueNotifications;
     private final ReleaseAbandonedClaimsUseCase releaseAbandonedClaims;
@@ -75,9 +80,17 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
     // the schedule for the life of the process, so this pass is lost and the next one is not.
     private int run(String pass, IntSupplier work) {
         try {
-            return work.getAsInt();
+            int result = work.getAsInt();
+            if (failingPasses.remove(pass)) {
+                log.info("the {} pass recovered", pass);
+            }
+            return result;
         } catch (RuntimeException failure) {
-            log.warn("the {} pass failed and will be retried on the next tick", pass, failure);
+            if (failingPasses.add(pass)) {
+                log.warn("the {} pass failed and will be retried on the next tick", pass, failure);
+            } else {
+                log.debug("the {} pass is still failing: {}", pass, failure.toString());
+            }
             return 0;
         }
     }

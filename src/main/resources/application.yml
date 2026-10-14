@@ -95,6 +95,9 @@ management:
   metrics:
     tags:
       application: notification-service
+    distribution:
+      percentiles-histogram:
+        notifications.delivery.duration: true
 
 # ---------------------------------------------------------------------------
 # Application-specific configuration, bound to typed @ConfigurationProperties.
