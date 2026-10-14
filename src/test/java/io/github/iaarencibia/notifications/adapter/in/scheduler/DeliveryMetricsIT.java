@@ -82,6 +82,11 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
                 "notifications_delivery_duration_seconds_count",
                 "channel=\"SERVICE\"",
                 "outcome=\"SUCCESS\"");
+        awaitSample("notifications_claims_total", "channel=\"SERVICE\"");
+        awaitSample(
+                "notifications_delivery_duration_seconds_bucket",
+                "channel=\"SERVICE\"",
+                "outcome=\"SUCCESS\"");
         awaitSample("notifications_settled_total", "channel=\"SERVICE\"", "result=\"sent\"");
     }
 

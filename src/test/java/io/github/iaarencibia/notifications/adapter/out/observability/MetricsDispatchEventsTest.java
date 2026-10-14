@@ -123,11 +123,13 @@ class MetricsDispatchEventsTest {
     }
 
     @Test
-    @DisplayName("records nothing when a notification is claimed")
-    void recordsNothingOnClaim() {
+    @DisplayName("counts each claimed notification under its channel")
+    void countsEachClaim() {
+        events.claimed(notification(NotificationStatus.PENDING));
         events.claimed(notification(NotificationStatus.PENDING));
 
-        assertThat(registry.getMeters()).isEmpty();
+        assertThat(registry.get("notifications.claims").tag("channel", "SERVICE").counter().count())
+                .isEqualTo(2);
     }
 
     private static NotificationAttempt attempt(Notification notification, AttemptOutcome outcome) {
