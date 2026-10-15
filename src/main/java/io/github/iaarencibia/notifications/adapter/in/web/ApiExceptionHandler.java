@@ -30,6 +30,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.filter.ServerHttpObservationFilter;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
@@ -241,6 +242,8 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 request.getMethod(),
                 request.getRequestURI(),
                 exception);
+        ServerHttpObservationFilter.findObservationContext(request)
+                .ifPresent(context -> context.setError(exception));
         return ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR, "The request could not be completed");
     }
