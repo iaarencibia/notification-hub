@@ -99,8 +99,10 @@ management:
       percentiles-histogram:
         notifications.delivery.duration: true
         notifications.claim.delay: true
+        notifications.delivery.latency: true
       maximum-expected-value:
         notifications.claim.delay: 10m
+        notifications.delivery.latency: 30m
 
 # ---------------------------------------------------------------------------
 # Application-specific configuration, bound to typed @ConfigurationProperties.

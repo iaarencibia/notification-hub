@@ -42,6 +42,9 @@ final class MetricsDispatchEvents implements DispatchEvents {
         }
         for (Priority priority : Priority.values()) {
             claimDelay(priority);
+            for (String result : List.of(SENT, FAILED)) {
+                latency(priority, result);
+            }
         }
         for (String kind : List.of(CLAIM_LOST, UNEXPECTED)) {
             errors(kind);
@@ -63,11 +66,20 @@ final class MetricsDispatchEvents implements DispatchEvents {
         duration(channel, outcome).record(Duration.ofMillis(attempt.durationMs()));
 
         switch (notification.status()) {
-            case SENT -> settled(channel, SENT).increment();
-            case FAILED -> settled(channel, FAILED).increment();
+            case SENT -> settle(notification, attempt, SENT);
+            case FAILED -> settle(notification, attempt, FAILED);
             case PENDING -> retries(channel).increment();
             default -> {}
         }
+    }
+
+    private void settle(Notification notification, NotificationAttempt attempt, String result) {
+        settled(notification.payload().channel().name(), result).increment();
+        Duration latency = Duration.between(notification.createdAt(), attempt.finishedAt());
+        // A wall-clock step can make this negative, and a timer drops a negative amount
+        // silently; clamped, every settled notification is counted here too.
+        latency(notification.payload().priority(), result)
+                .record(latency.isNegative() ? Duration.ZERO : latency);
     }
 
     @Override
@@ -103,6 +115,11 @@ final class MetricsDispatchEvents implements DispatchEvents {
 
     private Counter settled(String channel, String result) {
         return registry.counter("notifications.settled", "channel", channel, "result", result);
+    }
+
+    private Timer latency(Priority priority, String result) {
+        return registry.timer(
+                "notifications.delivery.latency", "priority", priority.name(), "result", result);
     }
 
     private Counter errors(String kind) {
