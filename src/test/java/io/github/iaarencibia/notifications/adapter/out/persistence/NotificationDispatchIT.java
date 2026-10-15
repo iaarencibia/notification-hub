@@ -322,6 +322,7 @@ class NotificationDispatchIT extends IntegrationTestSupport {
                         outcome,
                         startedAt,
                         clock.now(),
+                        Duration.ofMillis(42),
                         new RetryPolicy(Duration.ofSeconds(5), 3.0, Duration.ofMinutes(5), 0.0));
     }
 

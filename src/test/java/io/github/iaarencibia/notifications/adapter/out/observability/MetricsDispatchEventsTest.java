@@ -217,7 +217,8 @@ class MetricsDispatchEventsTest {
                 200,
                 outcome == AttemptOutcome.SUCCESS ? null : "boom",
                 start,
-                start.plusMillis(1500));
+                start.plusMillis(4500),
+                1500L);
     }
 
     private static Notification notification(NotificationStatus status) {

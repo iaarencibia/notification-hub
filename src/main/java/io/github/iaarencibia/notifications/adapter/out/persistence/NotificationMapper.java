@@ -80,7 +80,8 @@ final class NotificationMapper {
                 entity.getResponseCode(),
                 entity.getErrorMessage(),
                 entity.getStartedAt(),
-                entity.getFinishedAt());
+                entity.getFinishedAt(),
+                entity.getDurationMs());
     }
 
     static Notification toDomain(NotificationEntity entity) {

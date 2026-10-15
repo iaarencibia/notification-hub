@@ -99,7 +99,8 @@ class GetNotificationServiceTest {
                 202,
                 null,
                 at,
-                at);
+                at,
+                0L);
     }
 
     private static final class FakeRepository implements NotificationRepository {

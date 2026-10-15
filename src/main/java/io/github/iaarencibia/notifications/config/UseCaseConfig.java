@@ -94,6 +94,7 @@ class UseCaseConfig {
                 new CompositeDispatchEvents(events),
                 workers,
                 clock,
+                System::nanoTime,
                 senders,
                 retryPolicy);
     }
