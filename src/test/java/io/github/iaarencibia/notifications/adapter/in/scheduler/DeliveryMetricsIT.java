@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.iaarencibia.notifications.IntegrationTestSupport;
+import io.github.iaarencibia.notifications.adapter.in.web.IntakeRefusals.Reason;
 import io.github.iaarencibia.notifications.application.port.in.dispatch.DispatchDueNotificationsUseCase;
 import io.github.iaarencibia.notifications.application.port.in.observe.ObserveQueueDepthUseCase;
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationCommand;
@@ -140,7 +141,7 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("exports every series of a channel at zero before any traffic reaches it")
+    @DisplayName("exports untouched channels and every refusal reason at zero before any traffic")
     void exportsUntouchedSeriesAtZero() throws Exception {
         String exported = scrape();
         String log = "channel=\"LOG\"";
@@ -186,6 +187,14 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
         assertThat(samples(exported, "notifications_replayed_total", log)).containsExactly(0.0);
         assertThat(samples(exported, "notifications_claims_total", log)).containsExactly(0.0);
         assertThat(samples(exported, "notifications_retries_total", log)).containsExactly(0.0);
+        for (Reason reason : Reason.values()) {
+            assertThat(
+                            samples(
+                                    exported,
+                                    "notifications_refused_total",
+                                    "reason=\"" + reason.label() + "\""))
+                    .containsExactly(0.0);
+        }
         assertThat(exported).doesNotContain("channel=\"EMAIL\"");
     }
 

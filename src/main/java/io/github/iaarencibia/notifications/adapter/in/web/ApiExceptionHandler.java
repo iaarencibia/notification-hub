@@ -2,6 +2,7 @@ package io.github.iaarencibia.notifications.adapter.in.web;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import io.github.iaarencibia.notifications.adapter.in.web.IntakeRefusals.Reason;
 import io.github.iaarencibia.notifications.application.DeliverableChannels;
 import io.github.iaarencibia.notifications.application.port.in.query.NotificationNotFoundException;
 import io.github.iaarencibia.notifications.application.port.in.submit.IdempotencyKeyReusedException;
@@ -26,9 +27,12 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
@@ -49,13 +53,15 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     private static final String API_KEY_SCHEME = "ApiKey";
 
     private final DeliverableChannels deliverableChannels;
+    private final IntakeRefusals intakeRefusals;
 
     /**
      * @param deliverableChannels the same set the use case decides with, held only to describe it
      *     in a refusal -- nothing here decides anything
      */
-    ApiExceptionHandler(DeliverableChannels deliverableChannels) {
+    ApiExceptionHandler(DeliverableChannels deliverableChannels, IntakeRefusals intakeRefusals) {
         this.deliverableChannels = deliverableChannels;
+        this.intakeRefusals = intakeRefusals;
     }
 
     /**
@@ -100,6 +106,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                         "One or more fields of the request body are invalid");
         problem.setProperty("errors", errors);
 
+        refused(request, Reason.INVALID_BODY);
         return handleExceptionInternal(
                 exception, problem, headers, HttpStatus.BAD_REQUEST, request);
     }
@@ -124,6 +131,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             problem.setProperty("errors", Map.of(fieldOf(invalidValue), reasonFor(invalidValue)));
         }
 
+        refused(request, Reason.UNREADABLE_BODY);
         return handleExceptionInternal(
                 exception, problem, headers, HttpStatus.BAD_REQUEST, request);
     }
@@ -134,7 +142,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
      * field.
      */
     @ExceptionHandler(InvalidRequestException.class)
-    ProblemDetail handleInvalidHeader(InvalidRequestException exception) {
+    ProblemDetail handleInvalidHeader(
+            InvalidRequestException exception, HttpServletRequest request) {
+        intakeRefusals.refused(request, Reason.INVALID_HEADER);
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(
                         HttpStatus.BAD_REQUEST, "One or more request headers are invalid");
@@ -148,7 +158,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
      * service's business, not the caller's.
      */
     @ExceptionHandler(UndeliverableChannelException.class)
-    ProblemDetail handleUndeliverableChannel(UndeliverableChannelException exception) {
+    ProblemDetail handleUndeliverableChannel(
+            UndeliverableChannelException exception, HttpServletRequest request) {
+        intakeRefusals.refused(request, Reason.UNDELIVERABLE_CHANNEL);
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(
                         HttpStatus.BAD_REQUEST,
@@ -160,7 +172,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(UnacceptableRecipientException.class)
-    ProblemDetail handleUnacceptableRecipient(UnacceptableRecipientException exception) {
+    ProblemDetail handleUnacceptableRecipient(
+            UnacceptableRecipientException exception, HttpServletRequest request) {
+        intakeRefusals.refused(request, Reason.UNACCEPTABLE_RECIPIENT);
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(
                         HttpStatus.BAD_REQUEST,
@@ -174,7 +188,8 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
      * guessing keys cannot learn from the response which half it got right.
      */
     @ExceptionHandler(AuthenticationException.class)
-    ResponseEntity<ProblemDetail> handleAuthentication() {
+    ResponseEntity<ProblemDetail> handleAuthentication(HttpServletRequest request) {
+        intakeRefusals.refused(request, Reason.UNAUTHENTICATED);
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(
                         HttpStatus.UNAUTHORIZED,
@@ -188,6 +203,26 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                         HttpHeaders.WWW_AUTHENTICATE,
                         API_KEY_SCHEME + " realm=\"notification-service\"")
                 .body(problem);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHttpMediaTypeNotSupported(
+            HttpMediaTypeNotSupportedException exception,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request) {
+        refused(request, Reason.UNSUPPORTED_MEDIA_TYPE);
+        return super.handleHttpMediaTypeNotSupported(exception, headers, status, request);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHttpMediaTypeNotAcceptable(
+            HttpMediaTypeNotAcceptableException exception,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request) {
+        refused(request, Reason.NOT_ACCEPTABLE);
+        return super.handleHttpMediaTypeNotAcceptable(exception, headers, status, request);
     }
 
     @Override
@@ -217,7 +252,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(IdempotencyKeyReusedException.class)
-    ProblemDetail handleIdempotencyKeyReused(IdempotencyKeyReusedException exception) {
+    ProblemDetail handleIdempotencyKeyReused(
+            IdempotencyKeyReusedException exception, HttpServletRequest request) {
+        intakeRefusals.refused(request, Reason.IDEMPOTENCY_KEY_REUSED);
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(
                         HttpStatus.UNPROCESSABLE_ENTITY,
@@ -243,6 +280,10 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 exception);
         return ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR, "The request could not be completed");
+    }
+
+    private void refused(WebRequest request, Reason reason) {
+        intakeRefusals.refused(((ServletWebRequest) request).getRequest(), reason);
     }
 
     private static String fieldOf(InvalidFormatException invalidValue) {
