@@ -239,11 +239,19 @@ class DispatchSchedulerConfigTest {
     }
 
     @Test
-    @DisplayName("registers nothing for a reaper pass that released nothing")
+    @DisplayName("exports released claims at zero before the reaper has run")
+    void startsReleasedClaimsAtZero() {
+        configuredRegistrar();
+
+        assertThat(registry.get("notifications.claims.released").counter().count()).isZero();
+    }
+
+    @Test
+    @DisplayName("keeps released claims at zero after a reaper pass that released nothing")
     void countsNothingWhenNothingWasReleased() {
         configuredRegistrar().getFixedDelayTaskList().get(1).getRunnable().run();
 
-        assertThat(registry.find("notifications.claims.released").counter()).isNull();
+        assertThat(registry.get("notifications.claims.released").counter().count()).isZero();
     }
 
     @Test

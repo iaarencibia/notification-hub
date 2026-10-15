@@ -13,6 +13,7 @@ import io.github.iaarencibia.notifications.application.port.in.dispatch.Dispatch
 import io.github.iaarencibia.notifications.application.port.in.observe.ObserveQueueDepthUseCase;
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationCommand;
 import io.github.iaarencibia.notifications.application.port.in.submit.SubmitNotificationUseCase;
+import io.github.iaarencibia.notifications.domain.AttemptOutcome;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.CorrelationId;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
@@ -78,20 +79,33 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
     @DisplayName("exports the intake, the attempt, its duration and the notification settled SENT")
     void exportsASuccessfulDelivery() throws Exception {
         DESTINATION.stubFor(post(urlEqualTo("/hook/ok")).willReturn(aResponse().withStatus(202)));
+        String before = scrape();
         submitTo("/hook/ok");
 
-        awaitSample("notifications_accepted_total", "channel=\"SERVICE\"");
-        awaitSample("notifications_attempts_total", "channel=\"SERVICE\"", "outcome=\"SUCCESS\"");
-        awaitSample(
+        awaitIncrease(
+                before,
+                "notifications_accepted_total",
+                "channel=\"SERVICE\"",
+                "priority=\"MEDIUM\"");
+        awaitIncrease(
+                before,
+                "notifications_attempts_total",
+                "channel=\"SERVICE\"",
+                "outcome=\"SUCCESS\"");
+        awaitIncrease(
+                before,
                 "notifications_delivery_duration_seconds_count",
                 "channel=\"SERVICE\"",
                 "outcome=\"SUCCESS\"");
-        awaitSample("notifications_claims_total", "channel=\"SERVICE\"");
-        awaitSample(
+        awaitIncrease(before, "notifications_claims_total", "channel=\"SERVICE\"");
+        awaitIncrease(
+                before,
                 "notifications_delivery_duration_seconds_bucket",
                 "channel=\"SERVICE\"",
-                "outcome=\"SUCCESS\"");
-        awaitSample("notifications_settled_total", "channel=\"SERVICE\"", "result=\"sent\"");
+                "outcome=\"SUCCESS\"",
+                "le=\"+Inf\"");
+        awaitIncrease(
+                before, "notifications_settled_total", "channel=\"SERVICE\"", "result=\"sent\"");
     }
 
     @Test
@@ -99,13 +113,16 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
     void exportsAFailedDelivery() throws Exception {
         DESTINATION.stubFor(
                 post(urlEqualTo("/hook/broken")).willReturn(aResponse().withStatus(400)));
+        String before = scrape();
         submitTo("/hook/broken");
 
-        awaitSample(
+        awaitIncrease(
+                before,
                 "notifications_attempts_total",
                 "channel=\"SERVICE\"",
                 "outcome=\"PERMANENT_FAILURE\"");
-        awaitSample("notifications_settled_total", "channel=\"SERVICE\"", "result=\"failed\"");
+        awaitIncrease(
+                before, "notifications_settled_total", "channel=\"SERVICE\"", "result=\"failed\"");
     }
 
     @Test
@@ -122,16 +139,85 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
                 .containsExactly(0.0);
     }
 
-    private void awaitSample(String metric, String... labels) throws Exception {
+    @Test
+    @DisplayName("exports every series of a channel at zero before any traffic reaches it")
+    void exportsUntouchedSeriesAtZero() throws Exception {
+        String exported = scrape();
+        String log = "channel=\"LOG\"";
+
+        for (Priority priority : Priority.values()) {
+            assertThat(
+                            samples(
+                                    exported,
+                                    "notifications_accepted_total",
+                                    log,
+                                    "priority=\"" + priority.name() + "\""))
+                    .containsExactly(0.0);
+        }
+        for (AttemptOutcome outcome : AttemptOutcome.values()) {
+            String label = "outcome=\"" + outcome.name() + "\"";
+            assertThat(samples(exported, "notifications_attempts_total", log, label))
+                    .containsExactly(0.0);
+            assertThat(
+                            samples(
+                                    exported,
+                                    "notifications_delivery_duration_seconds_count",
+                                    log,
+                                    label))
+                    .containsExactly(0.0);
+        }
+        for (String result : List.of("sent", "failed")) {
+            assertThat(
+                            samples(
+                                    exported,
+                                    "notifications_settled_total",
+                                    log,
+                                    "result=\"" + result + "\""))
+                    .containsExactly(0.0);
+        }
+        for (String kind : List.of("claim_lost", "unexpected")) {
+            assertThat(
+                            samples(
+                                    exported,
+                                    "notifications_dispatch_errors_total",
+                                    "kind=\"" + kind + "\""))
+                    .containsExactly(0.0);
+        }
+        assertThat(samples(exported, "notifications_replayed_total", log)).containsExactly(0.0);
+        assertThat(samples(exported, "notifications_claims_total", log)).containsExactly(0.0);
+        assertThat(samples(exported, "notifications_retries_total", log)).containsExactly(0.0);
+        assertThat(exported).doesNotContain("channel=\"EMAIL\"");
+    }
+
+    @Test
+    @DisplayName("exports a repeated idempotency key as a replay under its channel")
+    void exportsAReplay() throws Exception {
+        String before = scrape();
+        submitTo("/hook/replayed", "key-replayed");
+        submitTo("/hook/replayed", "key-replayed");
+
+        double baseline = single(before, "notifications_replayed_total", "channel=\"SERVICE\"");
+        assertThat(single(scrape(), "notifications_replayed_total", "channel=\"SERVICE\""))
+                .isEqualTo(baseline + 1);
+    }
+
+    private void awaitIncrease(String before, String metric, String... labels) throws Exception {
+        double baseline = single(before, metric, labels);
         Instant deadline = Instant.now().plus(Duration.ofSeconds(30));
         while (Instant.now().isBefore(deadline)) {
             dispatcher.dispatchDue();
-            if (samples(scrape(), metric, labels).stream().anyMatch(value -> value >= 1)) {
+            if (single(scrape(), metric, labels) >= baseline + 1) {
                 return;
             }
             Thread.sleep(50);
         }
-        throw new AssertionError("no " + metric + " sample with " + List.of(labels) + " exported");
+        throw new AssertionError(metric + " with " + List.of(labels) + " never increased");
+    }
+
+    private static double single(String exported, String metric, String... labels) {
+        List<Double> found = samples(exported, metric, labels);
+        assertThat(found).as("%s with %s", metric, List.of(labels)).hasSize(1);
+        return found.getFirst();
     }
 
     private String scrape() throws Exception {
@@ -152,6 +238,10 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
     }
 
     private void submitTo(String path) {
+        submitTo(path, "key-" + UUID.randomUUID());
+    }
+
+    private void submitTo(String path, String idempotencyKey) {
         NotificationPayload payload =
                 new NotificationPayload(
                         DESTINATION.baseUrl() + path,
@@ -163,6 +253,6 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
 
         intake.submit(
                 new SubmitNotificationCommand(
-                        payload, new CorrelationId("order-4471"), "key-" + UUID.randomUUID()));
+                        payload, new CorrelationId("order-4471"), idempotencyKey));
     }
 }

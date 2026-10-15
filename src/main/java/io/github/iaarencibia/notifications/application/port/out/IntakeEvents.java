@@ -6,4 +6,6 @@ import io.github.iaarencibia.notifications.domain.Notification;
 public interface IntakeEvents {
 
     void accepted(Notification notification);
+
+    void replayed(Notification original);
 }
