@@ -15,6 +15,7 @@ import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
 import io.github.iaarencibia.notifications.domain.NotificationStatus;
 import io.github.iaarencibia.notifications.domain.Priority;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -98,7 +99,7 @@ class LoggingDispatchEventsTest {
     void logsAClaimAtDebug() {
         Notification notification = claimedNotification();
 
-        events.claimed(notification);
+        events.claimed(notification, Duration.ZERO);
 
         ILoggingEvent event = captured.list.getFirst();
         assertThat(event.getLevel()).isEqualTo(Level.DEBUG);

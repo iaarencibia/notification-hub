@@ -14,6 +14,7 @@ import io.github.iaarencibia.notifications.domain.NotificationStatus;
 import io.github.iaarencibia.notifications.domain.Priority;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -161,10 +162,34 @@ class MetricsDispatchEventsTest {
     void countsEachClaim() {
         assertThat(count("notifications.claims", "channel", "SERVICE")).isZero();
 
-        events.claimed(notification(NotificationStatus.PENDING));
-        events.claimed(notification(NotificationStatus.PENDING));
+        events.claimed(notification(NotificationStatus.PENDING), Duration.ZERO);
+        events.claimed(notification(NotificationStatus.PENDING), Duration.ZERO);
 
         assertThat(count("notifications.claims", "channel", "SERVICE")).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("exports the claim delay of every priority at zero before any claim")
+    void startsEveryPriorityClaimDelayAtZero() {
+        for (Priority priority : Priority.values()) {
+            assertThat(claimDelay(priority).count()).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("times how long a claimed notification waited, under its priority only")
+    void timesTheClaimDelayUnderItsPriority() {
+        assertThat(claimDelay(Priority.HIGH).count()).isZero();
+
+        events.claimed(notification(NotificationStatus.PENDING), Duration.ofMillis(2500));
+
+        assertThat(claimDelay(Priority.HIGH).count()).isEqualTo(1);
+        assertThat(claimDelay(Priority.HIGH).totalTime(TimeUnit.MILLISECONDS)).isEqualTo(2500);
+        assertThat(claimDelay(Priority.MEDIUM).count()).isZero();
+        assertThat(claimDelay(Priority.LOW).count()).isZero();
+        assertThat(registry.get("notifications.claim.delay").timers())
+                .as("no channel tag: it would multiply the histogram series for nothing")
+                .allSatisfy(timer -> assertThat(timer.getId().getTag("channel")).isNull());
     }
 
     private double count(String name, String... tags) {
@@ -175,6 +200,10 @@ class MetricsDispatchEventsTest {
         return registry.get("notifications.delivery.duration")
                 .tags("channel", channel, "outcome", outcome)
                 .timer();
+    }
+
+    private Timer claimDelay(Priority priority) {
+        return registry.get("notifications.claim.delay").tag("priority", priority.name()).timer();
     }
 
     private static NotificationAttempt attempt(Notification notification, AttemptOutcome outcome) {

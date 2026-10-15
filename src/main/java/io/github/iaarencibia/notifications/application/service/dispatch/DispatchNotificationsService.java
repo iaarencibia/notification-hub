@@ -12,6 +12,7 @@ import io.github.iaarencibia.notifications.domain.DispatchOutcome;
 import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.RetryPolicy;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -64,10 +65,15 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
     public int dispatchDue() {
         List<ClaimedNotification> claimed = queue.claimDue(batchSize, instanceId);
         for (ClaimedNotification each : claimed) {
-            events.claimed(each.notification());
+            events.claimed(each.notification(), waitedSinceDue(each.notification()));
             deliveries.execute(() -> deliver(each));
         }
         return claimed.size();
+    }
+
+    private static Duration waitedSinceDue(Notification claimed) {
+        Duration waited = Duration.between(claimed.nextAttemptAt(), claimed.claimedAt());
+        return waited.isNegative() ? Duration.ZERO : waited;
     }
 
     // Nothing may escape here: the executor's default handler would just log the throwable and
