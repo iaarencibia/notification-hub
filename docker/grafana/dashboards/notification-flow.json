@@ -1,0 +1,11 @@
+{
+  "uid": "notification-flow",
+  "title": "Notification flow",
+  "tags": ["notification-hub"],
+  "timezone": "browser",
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "schemaVersion": 41,
+  "editable": false,
+  "panels": []
+}
