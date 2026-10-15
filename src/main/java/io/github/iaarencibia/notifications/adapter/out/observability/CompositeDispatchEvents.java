@@ -4,6 +4,7 @@ import io.github.iaarencibia.notifications.application.port.out.ClaimLostExcepti
 import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
+import java.time.Duration;
 import java.util.List;
 
 /** Reports each dispatch event to every listener, in order. */
@@ -16,8 +17,8 @@ public final class CompositeDispatchEvents implements DispatchEvents {
     }
 
     @Override
-    public void claimed(Notification notification) {
-        listeners.forEach(listener -> listener.claimed(notification));
+    public void claimed(Notification notification, Duration waitedSinceDue) {
+        listeners.forEach(listener -> listener.claimed(notification, waitedSinceDue));
     }
 
     @Override

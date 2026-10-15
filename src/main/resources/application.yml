@@ -98,6 +98,9 @@ management:
     distribution:
       percentiles-histogram:
         notifications.delivery.duration: true
+        notifications.claim.delay: true
+      maximum-expected-value:
+        notifications.claim.delay: 10m
 
 # ---------------------------------------------------------------------------
 # Application-specific configuration, bound to typed @ConfigurationProperties.

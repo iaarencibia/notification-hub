@@ -7,6 +7,7 @@ import io.github.iaarencibia.notifications.domain.AttemptOutcome;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
+import io.github.iaarencibia.notifications.domain.Priority;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -39,14 +40,18 @@ final class MetricsDispatchEvents implements DispatchEvents {
                 settled(name, result);
             }
         }
+        for (Priority priority : Priority.values()) {
+            claimDelay(priority);
+        }
         for (String kind : List.of(CLAIM_LOST, UNEXPECTED)) {
             errors(kind);
         }
     }
 
     @Override
-    public void claimed(Notification notification) {
+    public void claimed(Notification notification, Duration waitedSinceDue) {
         claims(notification.payload().channel().name()).increment();
+        claimDelay(notification.payload().priority()).record(waitedSinceDue);
     }
 
     @Override
@@ -77,6 +82,10 @@ final class MetricsDispatchEvents implements DispatchEvents {
 
     private Counter claims(String channel) {
         return registry.counter("notifications.claims", "channel", channel);
+    }
+
+    private Timer claimDelay(Priority priority) {
+        return registry.timer("notifications.claim.delay", "priority", priority.name());
     }
 
     private Counter attempts(String channel, String outcome) {

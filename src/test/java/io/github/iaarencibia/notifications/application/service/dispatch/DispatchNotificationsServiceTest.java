@@ -232,8 +232,41 @@ class DispatchNotificationsServiceTest {
                     .dispatchDue();
 
             assertThat(events.claimedCalls)
+                    .extracting(RecordingEvents.ClaimedCall::notification)
                     .containsExactly(first.notification(), second.notification());
             assertThat(claimsSeenAtDelivery).containsExactly(1);
+        }
+
+        @Test
+        @DisplayName("reports how long each row waited between becoming due and being claimed")
+        void reportsHowLongEachRowWaitedSinceDue() {
+            Instant claimedAt = STARTED_AT.plusSeconds(3);
+            ClaimedNotification firstAttempt =
+                    new ClaimedNotification(dueAndClaimed(STARTED_AT, claimedAt), 1L);
+            ClaimedNotification retry =
+                    new ClaimedNotification(
+                            dueAndClaimed(STARTED_AT.plusMillis(1500), claimedAt), 1L);
+            queue.willClaim(firstAttempt, retry);
+
+            serviceDelivering(new DispatchOutcome.Success(null)).dispatchDue();
+
+            assertThat(events.claimedCalls)
+                    .extracting(RecordingEvents.ClaimedCall::waitedSinceDue)
+                    .as("a retry waits from its own next attempt, not from its creation")
+                    .containsExactly(Duration.ofSeconds(3), Duration.ofMillis(1500));
+        }
+
+        @Test
+        @DisplayName("reports a row claimed before it was due as having waited zero")
+        void reportsNoNegativeWait() {
+            Instant claimedAt = STARTED_AT;
+            queue.willClaim(
+                    new ClaimedNotification(
+                            dueAndClaimed(claimedAt.plusSeconds(1), claimedAt), 1L));
+
+            serviceDelivering(new DispatchOutcome.Success(null)).dispatchDue();
+
+            assertThat(events.claimedCalls.getFirst().waitedSinceDue()).isEqualTo(Duration.ZERO);
         }
 
         @Test
@@ -316,8 +349,16 @@ class DispatchNotificationsServiceTest {
         return dispatching(channel, 0);
     }
 
-    /** A notification in the state the claim query leaves it in. */
     private static Notification dispatching(Channel channel, int attemptsAlreadySpent) {
+        return claimedNotification(channel, attemptsAlreadySpent, STARTED_AT, STARTED_AT);
+    }
+
+    private static Notification dueAndClaimed(Instant dueAt, Instant claimedAt) {
+        return claimedNotification(Channel.LOG, 0, dueAt, claimedAt);
+    }
+
+    private static Notification claimedNotification(
+            Channel channel, int attemptsAlreadySpent, Instant dueAt, Instant claimedAt) {
         NotificationPayload payload =
                 new NotificationPayload(
                         "someone@example.test",
@@ -333,9 +374,9 @@ class DispatchNotificationsServiceTest {
                 NotificationStatus.DISPATCHING,
                 attemptsAlreadySpent,
                 3,
-                STARTED_AT,
+                dueAt,
                 null,
-                STARTED_AT,
+                claimedAt,
                 INSTANCE,
                 new CorrelationId("order-4471"),
                 null,
@@ -434,14 +475,14 @@ class DispatchNotificationsServiceTest {
 
     private static final class RecordingEvents implements DispatchEvents {
 
-        private final List<Notification> claimedCalls = new ArrayList<>();
+        private final List<ClaimedCall> claimedCalls = new ArrayList<>();
         private final List<DispatchedCall> dispatchedCalls = new ArrayList<>();
         private final List<ClaimLostCall> claimLostCalls = new ArrayList<>();
         private final List<FailedCall> failedCalls = new ArrayList<>();
 
         @Override
-        public void claimed(Notification notification) {
-            claimedCalls.add(notification);
+        public void claimed(Notification notification, Duration waitedSinceDue) {
+            claimedCalls.add(new ClaimedCall(notification, waitedSinceDue));
         }
 
         @Override
@@ -458,6 +499,8 @@ class DispatchNotificationsServiceTest {
         public void failed(Notification notification, RuntimeException cause) {
             failedCalls.add(new FailedCall(notification, cause));
         }
+
+        private record ClaimedCall(Notification notification, Duration waitedSinceDue) {}
 
         private record DispatchedCall(Notification notification, NotificationAttempt attempt) {}
 

@@ -110,6 +110,39 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("exports one claim delay, under the claimed notification's priority")
+    void exportsTheClaimDelay() throws Exception {
+        DESTINATION.stubFor(post(urlEqualTo("/hook/ok")).willReturn(aResponse().withStatus(202)));
+        String medium = "priority=\"MEDIUM\"";
+        String before = scrape();
+        submitTo("/hook/ok");
+
+        awaitIncrease(before, "notifications_claim_delay_seconds_count", medium);
+        // Left in flight, the delivery would lose its row to the next test's truncate.
+        awaitIncrease(
+                before, "notifications_settled_total", "channel=\"SERVICE\"", "result=\"sent\"");
+
+        String after = scrape();
+        assertThat(single(after, "notifications_claim_delay_seconds_count", medium))
+                .isEqualTo(single(before, "notifications_claim_delay_seconds_count", medium) + 1);
+        assertThat(single(after, "notifications_claim_delay_seconds_bucket", medium, "le=\"+Inf\""))
+                .isEqualTo(
+                        single(
+                                        before,
+                                        "notifications_claim_delay_seconds_bucket",
+                                        medium,
+                                        "le=\"+Inf\"")
+                                + 1);
+        assertThat(
+                        samples(
+                                after,
+                                "notifications_claim_delay_seconds_bucket",
+                                medium,
+                                "le=\"600.0\""))
+                .hasSize(1);
+    }
+
+    @Test
     @DisplayName("exports the notification a destination refused as settled FAILED")
     void exportsAFailedDelivery() throws Exception {
         DESTINATION.stubFor(
@@ -187,6 +220,27 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
         assertThat(samples(exported, "notifications_replayed_total", log)).containsExactly(0.0);
         assertThat(samples(exported, "notifications_claims_total", log)).containsExactly(0.0);
         assertThat(samples(exported, "notifications_retries_total", log)).containsExactly(0.0);
+        for (Priority priority : Priority.values()) {
+            String label = "priority=\"" + priority.name() + "\"";
+            assertThat(samples(exported, "notifications_claim_delay_seconds_count", label))
+                    .hasSize(1);
+            assertThat(
+                            samples(
+                                    exported,
+                                    "notifications_claim_delay_seconds_bucket",
+                                    label,
+                                    "le=\"+Inf\""))
+                    .hasSize(1);
+        }
+        for (Priority unclaimed : List.of(Priority.LOW, Priority.HIGH)) {
+            assertThat(
+                            samples(
+                                    exported,
+                                    "notifications_claim_delay_seconds_count",
+                                    "priority=\"" + unclaimed.name() + "\""))
+                    .as("this class only ever claims MEDIUM")
+                    .containsExactly(0.0);
+        }
         for (Reason reason : Reason.values()) {
             assertThat(
                             samples(

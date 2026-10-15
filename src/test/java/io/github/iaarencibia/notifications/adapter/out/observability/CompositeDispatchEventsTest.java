@@ -10,6 +10,7 @@ import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.NotificationPayload;
 import io.github.iaarencibia.notifications.domain.Priority;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,9 +32,9 @@ class CompositeDispatchEventsTest {
     @Test
     @DisplayName("forwards a claim to every listener, in order")
     void forwardsClaimed() {
-        events.claimed(notification());
+        events.claimed(notification(), Duration.ofSeconds(2));
 
-        assertThat(calls).containsExactly("first:claimed", "second:claimed");
+        assertThat(calls).containsExactly("first:claimed PT2S", "second:claimed PT2S");
     }
 
     @Test
@@ -79,8 +80,8 @@ class CompositeDispatchEventsTest {
     private record RecordingEvents(String name, List<String> calls) implements DispatchEvents {
 
         @Override
-        public void claimed(Notification notification) {
-            calls.add(name + ":claimed");
+        public void claimed(Notification notification, Duration waitedSinceDue) {
+            calls.add(name + ":claimed " + waitedSinceDue);
         }
 
         @Override

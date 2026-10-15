@@ -5,6 +5,7 @@ import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.domain.Notification;
 import io.github.iaarencibia.notifications.domain.NotificationAttempt;
 import io.github.iaarencibia.notifications.domain.NotificationStatus;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
@@ -21,7 +22,7 @@ final class LoggingDispatchEvents implements DispatchEvents {
     private static final Logger log = LoggerFactory.getLogger(LoggingDispatchEvents.class);
 
     @Override
-    public void claimed(Notification notification) {
+    public void claimed(Notification notification, Duration waitedSinceDue) {
         log.atDebug()
                 .addKeyValue("notificationId", notification.id())
                 .addKeyValue("correlationId", notification.correlationId().value())
