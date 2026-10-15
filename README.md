@@ -137,6 +137,29 @@ Compose stack and off by default anywhere else.
 
 The retry schedule, the timeouts, the poll interval and the pool sizes are all configuration.
 
+### Dashboard
+
+```bash
+docker compose --profile monitoring up --build
+```
+
+This adds Prometheus at <http://localhost:9090> and Grafana at <http://localhost:3000>. The
+"Notification flow" dashboard opens without a login and follows a notification through one row per
+stage:
+
+| Row | What it shows |
+|---|---|
+| Intake | Accepted per channel, refused per reason, idempotent replays |
+| Queue | Rows `PENDING` and `DISPATCHING`, read from the table |
+| Claim | Claims against acceptances, and how long a due row waited to be claimed |
+| Delivery | Attempts per outcome, attempt duration p95, attempts that succeeded |
+| Outcome | Sent and failed, retries scheduled, time from acceptance to settlement p95 per priority |
+| Recovery | Abandoned claims the reaper released, lost claims, unexpected errors |
+
+Prometheus cannot read environment variables in its configuration, so the development API key is
+written in [`prometheus.yml`](docker/prometheus/prometheus.yml). A stack started with another
+`NOTIFICATIONS_API_KEY` has to change it there too.
+
 ## Tests
 
 ```bash
