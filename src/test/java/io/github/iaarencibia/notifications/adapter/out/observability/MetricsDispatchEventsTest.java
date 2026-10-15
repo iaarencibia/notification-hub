@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 class MetricsDispatchEventsTest {
 
     private static final Set<Channel> DELIVERABLE = Set.of(Channel.LOG, Channel.SERVICE);
+    private static final Instant ACCEPTED = Instant.parse("2026-10-14T09:00:00Z");
 
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final MetricsDispatchEvents events =
@@ -192,6 +193,80 @@ class MetricsDispatchEventsTest {
                 .allSatisfy(timer -> assertThat(timer.getId().getTag("channel")).isNull());
     }
 
+    @Test
+    @DisplayName(
+            "exports the delivery latency of every priority and result at zero before any dispatch")
+    void startsEveryDeliveryLatencyAtZero() {
+        for (Priority priority : Priority.values()) {
+            for (String result : List.of("sent", "failed")) {
+                assertThat(latency(priority, result).count()).isZero();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("times a notification settled SENT from its acceptance to the end of that attempt")
+    void timesTheLatencyOfASentNotification() {
+        Notification notification = notification(NotificationStatus.SENT);
+        assertThat(latency(Priority.HIGH, "sent").count()).isZero();
+
+        events.dispatched(
+                notification,
+                attempt(notification, AttemptOutcome.SUCCESS, ACCEPTED.plusMillis(64_500)));
+
+        assertThat(latency(Priority.HIGH, "sent").count()).isEqualTo(1);
+        assertThat(latency(Priority.HIGH, "sent").totalTime(TimeUnit.MILLISECONDS))
+                .isEqualTo(64_500);
+        assertThat(latency(Priority.HIGH, "failed").count()).isZero();
+        assertThat(registry.get("notifications.delivery.latency").timers())
+                .as("no channel tag: it would multiply the histogram series for nothing")
+                .allSatisfy(timer -> assertThat(timer.getId().getTag("channel")).isNull());
+    }
+
+    @Test
+    @DisplayName(
+            "times a notification settled FAILED from its acceptance to the end of that attempt")
+    void timesTheLatencyOfAFailedNotification() {
+        Notification notification = notification(NotificationStatus.FAILED);
+        assertThat(latency(Priority.HIGH, "failed").count()).isZero();
+
+        events.dispatched(
+                notification,
+                attempt(
+                        notification,
+                        AttemptOutcome.PERMANENT_FAILURE,
+                        ACCEPTED.plusMillis(7_250)));
+
+        assertThat(latency(Priority.HIGH, "failed").count()).isEqualTo(1);
+        assertThat(latency(Priority.HIGH, "failed").totalTime(TimeUnit.MILLISECONDS))
+                .isEqualTo(7_250);
+        assertThat(latency(Priority.HIGH, "sent").count()).isZero();
+    }
+
+    @Test
+    @DisplayName("times no delivery latency for a notification that goes back to PENDING")
+    void timesNoLatencyOnARetry() {
+        Notification notification = notification(NotificationStatus.PENDING);
+
+        events.dispatched(notification, attempt(notification, AttemptOutcome.RETRYABLE_FAILURE));
+
+        assertThat(registry.get("notifications.delivery.latency").timers())
+                .allSatisfy(timer -> assertThat(timer.count()).isZero());
+    }
+
+    @Test
+    @DisplayName("times a settlement that precedes its acceptance as zero, so it is still counted")
+    void timesANegativeLatencyAsZero() {
+        Notification notification = notification(NotificationStatus.SENT);
+
+        events.dispatched(
+                notification,
+                attempt(notification, AttemptOutcome.SUCCESS, ACCEPTED.minusSeconds(2)));
+
+        assertThat(latency(Priority.HIGH, "sent").count()).isEqualTo(1);
+        assertThat(latency(Priority.HIGH, "sent").totalTime(TimeUnit.MILLISECONDS)).isZero();
+    }
+
     private double count(String name, String... tags) {
         return registry.get(name).tags(tags).counter().count();
     }
@@ -206,8 +281,18 @@ class MetricsDispatchEventsTest {
         return registry.get("notifications.claim.delay").tag("priority", priority.name()).timer();
     }
 
+    private Timer latency(Priority priority, String result) {
+        return registry.get("notifications.delivery.latency")
+                .tags("priority", priority.name(), "result", result)
+                .timer();
+    }
+
     private static NotificationAttempt attempt(Notification notification, AttemptOutcome outcome) {
-        Instant start = Instant.now();
+        return attempt(notification, outcome, ACCEPTED.plusSeconds(60));
+    }
+
+    private static NotificationAttempt attempt(
+            Notification notification, AttemptOutcome outcome, Instant finishedAt) {
         return new NotificationAttempt(
                 UUID.randomUUID(),
                 notification.id(),
@@ -216,13 +301,12 @@ class MetricsDispatchEventsTest {
                 outcome,
                 200,
                 outcome == AttemptOutcome.SUCCESS ? null : "boom",
-                start,
-                start.plusMillis(4500),
+                finishedAt.minusMillis(4500),
+                finishedAt,
                 1500L);
     }
 
     private static Notification notification(NotificationStatus status) {
-        Instant now = Instant.now();
         return Notification.rehydrate(
                 UUID.randomUUID(),
                 new NotificationPayload(
@@ -235,14 +319,14 @@ class MetricsDispatchEventsTest {
                 status,
                 1,
                 3,
-                now.plusSeconds(30),
+                ACCEPTED.plusSeconds(30),
                 status == NotificationStatus.SENT ? null : "boom",
                 null,
                 null,
                 new CorrelationId("order-4471"),
                 null,
-                now,
-                now,
-                status == NotificationStatus.SENT ? now : null);
+                ACCEPTED,
+                ACCEPTED,
+                status == NotificationStatus.SENT ? ACCEPTED : null);
     }
 }

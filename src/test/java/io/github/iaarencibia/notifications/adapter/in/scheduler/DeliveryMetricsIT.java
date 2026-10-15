@@ -143,6 +143,35 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName(
+            "exports one delivery latency, under the settled notification's priority and result")
+    void exportsTheDeliveryLatency() throws Exception {
+        DESTINATION.stubFor(post(urlEqualTo("/hook/ok")).willReturn(aResponse().withStatus(202)));
+        String medium = "priority=\"MEDIUM\"";
+        String sent = "result=\"sent\"";
+        String before = scrape();
+        submitTo("/hook/ok");
+
+        awaitIncrease(before, "notifications_delivery_latency_seconds_count", medium, sent);
+        awaitIncrease(
+                before, "notifications_settled_total", "channel=\"SERVICE\"", "result=\"sent\"");
+
+        String after = scrape();
+        assertThat(single(after, "notifications_delivery_latency_seconds_count", medium, sent))
+                .isEqualTo(
+                        single(before, "notifications_delivery_latency_seconds_count", medium, sent)
+                                + 1);
+        assertThat(
+                        samples(
+                                after,
+                                "notifications_delivery_latency_seconds_bucket",
+                                medium,
+                                sent,
+                                "le=\"1800.0\""))
+                .hasSize(1);
+    }
+
+    @Test
     @DisplayName("exports the notification a destination refused as settled FAILED")
     void exportsAFailedDelivery() throws Exception {
         DESTINATION.stubFor(
@@ -240,6 +269,29 @@ class DeliveryMetricsIT extends IntegrationTestSupport {
                                     "priority=\"" + unclaimed.name() + "\""))
                     .as("this class only ever claims MEDIUM")
                     .containsExactly(0.0);
+        }
+        for (Priority priority : Priority.values()) {
+            for (String result : List.of("sent", "failed")) {
+                assertThat(
+                                samples(
+                                        exported,
+                                        "notifications_delivery_latency_seconds_count",
+                                        "priority=\"" + priority.name() + "\"",
+                                        "result=\"" + result + "\""))
+                        .hasSize(1);
+            }
+        }
+        for (Priority unsettled : List.of(Priority.LOW, Priority.HIGH)) {
+            for (String result : List.of("sent", "failed")) {
+                assertThat(
+                                samples(
+                                        exported,
+                                        "notifications_delivery_latency_seconds_count",
+                                        "priority=\"" + unsettled.name() + "\"",
+                                        "result=\"" + result + "\""))
+                        .as("this class only ever settles MEDIUM")
+                        .containsExactly(0.0);
+            }
         }
         for (Reason reason : Reason.values()) {
             assertThat(
