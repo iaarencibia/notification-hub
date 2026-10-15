@@ -3,6 +3,10 @@ package io.github.iaarencibia.notifications.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.iaarencibia.notifications.IntegrationTestSupport;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Map;
+import java.util.TreeMap;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +16,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -26,6 +31,8 @@ import org.springframework.http.ResponseEntity;
 class ApiKeyErrorDispatchIT extends IntegrationTestSupport {
 
     @Autowired private TestRestTemplate restTemplate;
+
+    @Autowired private MeterRegistry registry;
 
     @Test
     @DisplayName("answers an authenticated caller with the real status when the request errors")
@@ -74,5 +81,34 @@ class ApiKeyErrorDispatchIT extends IntegrationTestSupport {
                         "/actuator/health", HttpMethod.POST, HttpEntity.EMPTY, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+    }
+
+    @Test
+    @DisplayName("counts an unauthenticated intake request once over real HTTP, and nothing else")
+    void countsTheIntakeRefusalOnce() {
+        Map<String, Double> before = refusals();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/api/v1/notifications",
+                        HttpMethod.POST,
+                        new HttpEntity<>("{}", headers),
+                        String.class);
+        restTemplate.getForEntity("/no-such-path", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        Map<String, Double> expected = new TreeMap<>(before);
+        expected.merge("unauthenticated", 1.0, Double::sum);
+        assertThat(refusals()).isEqualTo(expected);
+    }
+
+    private Map<String, Double> refusals() {
+        Map<String, Double> byReason = new TreeMap<>();
+        for (Counter counter : registry.find("notifications.refused").counters()) {
+            byReason.put(counter.getId().getTag("reason"), counter.count());
+        }
+        return byReason;
     }
 }
