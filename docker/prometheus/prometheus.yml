@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    # Prometheus does not expand environment variables in this file, so the development key
+    # from docker-compose.yml is written here as is. A stack started with another
+    # NOTIFICATIONS_API_KEY must change it here too.
+    authorization:
+      type: ApiKey
+      credentials: local-dev-api-key-change-me
+    static_configs:
+      - targets: ["app:8080"]
