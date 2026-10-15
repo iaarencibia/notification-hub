@@ -127,6 +127,7 @@ class SubmitNotificationServiceTest {
         assertThat(replay).isEqualTo(first);
         assertThat(repository.stored()).hasSize(1);
         assertThat(events.accepted).hasSize(1);
+        assertThat(events.replayed).containsExactly(repository.only());
     }
 
     @Test
@@ -146,6 +147,7 @@ class SubmitNotificationServiceTest {
                                                 CORRELATION_ID,
                                                 "key-reused")))
                 .satisfies(thrown -> assertThat(thrown.existingId()).isEqualTo(first));
+        assertThat(events.replayed).isEmpty();
     }
 
     @Test
@@ -161,6 +163,7 @@ class SubmitNotificationServiceTest {
                                                 payloadTo("http://localhost/hook"),
                                                 CORRELATION_ID,
                                                 null)));
+        assertThat(events.replayed).isEmpty();
     }
 
     @Test
@@ -195,6 +198,7 @@ class SubmitNotificationServiceTest {
         service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-1"));
 
         assertThat(events.accepted).containsExactly(repository.only());
+        assertThat(events.replayed).isEmpty();
     }
 
     @Test
@@ -204,6 +208,15 @@ class SubmitNotificationServiceTest {
         service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
 
         assertThat(events.accepted).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("reports a repeated key with the same payload as a replay of the original")
+    void reportsARepeatedKeyAsAReplay() {
+        service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
+        service.submit(new SubmitNotificationCommand(payload(), CORRELATION_ID, "key-repeated"));
+
+        assertThat(events.replayed).containsExactly(repository.only());
     }
 
     @Test
@@ -326,6 +339,7 @@ class SubmitNotificationServiceTest {
 
         assertThat(repository.stored()).hasSize(1);
         assertThat(events.accepted).hasSize(1);
+        assertThat(events.replayed).isEmpty();
     }
 
     @Test
@@ -376,6 +390,7 @@ class SubmitNotificationServiceTest {
                                 service.submit(
                                         new SubmitNotificationCommand(
                                                 payload(), CORRELATION_ID, "key-repeated")));
+        assertThat(events.replayed).isEmpty();
     }
 
     @Test
@@ -421,10 +436,16 @@ class SubmitNotificationServiceTest {
     private static final class RecordingIntakeEvents implements IntakeEvents {
 
         private final List<Notification> accepted = new ArrayList<>();
+        private final List<Notification> replayed = new ArrayList<>();
 
         @Override
         public void accepted(Notification notification) {
             accepted.add(notification);
+        }
+
+        @Override
+        public void replayed(Notification original) {
+            replayed.add(original);
         }
     }
 

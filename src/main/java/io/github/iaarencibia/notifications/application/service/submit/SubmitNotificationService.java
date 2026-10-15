@@ -96,6 +96,7 @@ public final class SubmitNotificationService implements SubmitNotificationUseCas
                 throw new IdempotencyKeyReusedException(
                         alreadyUsed.idempotencyKey(), existing.id());
             }
+            events.replayed(existing);
             return existing.id();
         }
     }
@@ -112,6 +113,7 @@ public final class SubmitNotificationService implements SubmitNotificationUseCas
                             if (!existing.payload().equals(command.payload())) {
                                 throw new IdempotencyKeyReusedException(key, existing.id());
                             }
+                            events.replayed(existing);
                             return existing.id();
                         });
     }

@@ -4,6 +4,7 @@ import io.github.iaarencibia.notifications.application.port.in.dispatch.Dispatch
 import io.github.iaarencibia.notifications.application.port.in.observe.ObserveQueueDepthUseCase;
 import io.github.iaarencibia.notifications.application.port.in.release.ReleaseAbandonedClaimsUseCase;
 import io.github.iaarencibia.notifications.config.NotificationsProperties;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,7 +47,7 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
     private final ReleaseAbandonedClaimsUseCase releaseAbandonedClaims;
     private final ObserveQueueDepthUseCase observeQueueDepth;
     private final NotificationsProperties properties;
-    private final MeterRegistry registry;
+    private final Counter releasedClaims;
 
     DispatchSchedulerConfig(
             DispatchDueNotificationsUseCase dispatchDueNotifications,
@@ -58,7 +59,7 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
         this.releaseAbandonedClaims = releaseAbandonedClaims;
         this.observeQueueDepth = observeQueueDepth;
         this.properties = properties;
-        this.registry = registry;
+        this.releasedClaims = registry.counter("notifications.claims.released");
     }
 
     @Override
@@ -76,7 +77,7 @@ class DispatchSchedulerConfig implements SchedulingConfigurer {
     private void recoverAbandonedWork() {
         int released = run("reaper", releaseAbandonedClaims::releaseAbandonedClaims);
         if (released > 0) {
-            registry.counter("notifications.claims.released").increment(released);
+            releasedClaims.increment(released);
             // Worth a line of its own: on a healthy system this never fires, so when it does it
             // says an instance died mid-delivery and those notifications may be delivered twice.
             log.warn("released {} abandoned claims", released);
