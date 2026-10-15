@@ -8,6 +8,7 @@ import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
+import io.github.iaarencibia.notifications.application.port.out.Ticker;
 import io.github.iaarencibia.notifications.domain.AttemptOutcome;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.CorrelationId;
@@ -42,6 +43,7 @@ class DispatchNotificationsServiceTest {
 
     private final RecordingQueue queue = new RecordingQueue();
     private final FixedClock clock = new FixedClock(STARTED_AT, FINISHED_AT);
+    private final FixedTicker ticker = new FixedTicker(0L, Duration.ofSeconds(2).toNanos());
     private final RecordingEvents events = new RecordingEvents();
 
     @Test
@@ -69,7 +71,29 @@ class DispatchNotificationsServiceTest {
         NotificationAttempt attempt = queue.recorded().getFirst().attempt();
         assertThat(attempt.startedAt()).isEqualTo(STARTED_AT);
         assertThat(attempt.finishedAt()).isEqualTo(FINISHED_AT);
-        assertThat(attempt.durationMs()).isEqualTo(2000);
+    }
+
+    @Test
+    @DisplayName("measures the duration on the monotonic ticker, not between the clock's instants")
+    void measuresTheDurationOnTheTicker() {
+        Instant afterAStepForward = STARTED_AT.plusSeconds(8);
+        long tickerStart = 1_000L;
+        queue.willClaim(claimed(Channel.SERVICE, 0));
+
+        serviceTiming(
+                        new FixedClock(STARTED_AT, afterAStepForward),
+                        new FixedTicker(tickerStart, tickerStart + Duration.ofSeconds(5).toNanos()),
+                        new DispatchOutcome.Success(200))
+                .dispatchDue();
+
+        NotificationAttempt persisted = queue.recorded().getFirst().attempt();
+        NotificationAttempt reported = events.dispatchedCalls.getFirst().attempt();
+        assertThat(persisted.durationMs())
+                .as("a wall-clock step of 3 s during the request is not time it took")
+                .isEqualTo(5_000L);
+        assertThat(reported.durationMs()).isEqualTo(5_000L);
+        assertThat(persisted.startedAt()).isEqualTo(STARTED_AT);
+        assertThat(persisted.finishedAt()).isEqualTo(afterAStepForward);
     }
 
     @Test
@@ -192,6 +216,7 @@ class DispatchNotificationsServiceTest {
                         events,
                         Runnable::run,
                         clock,
+                        ticker,
                         Map.of(Channel.LOG, log, Channel.SERVICE, service),
                         policy())
                 .dispatchDue();
@@ -227,6 +252,7 @@ class DispatchNotificationsServiceTest {
                             events,
                             Runnable::run,
                             clock,
+                            ticker,
                             Map.of(Channel.LOG, observing),
                             policy())
                     .dispatchDue();
@@ -310,6 +336,7 @@ class DispatchNotificationsServiceTest {
                                     events,
                                     Runnable::run,
                                     clock,
+                                    ticker,
                                     Map.of(Channel.LOG, new ThrowingSender(Channel.LOG, boom)),
                                     policy())
                             .dispatchDue();
@@ -321,6 +348,11 @@ class DispatchNotificationsServiceTest {
     }
 
     private DispatchNotificationsService serviceDelivering(DispatchOutcome outcome) {
+        return serviceTiming(clock, ticker, outcome);
+    }
+
+    private DispatchNotificationsService serviceTiming(
+            SystemClock clock, Ticker ticker, DispatchOutcome outcome) {
         return new DispatchNotificationsService(
                 queue,
                 25,
@@ -328,6 +360,7 @@ class DispatchNotificationsServiceTest {
                 events,
                 Runnable::run,
                 clock,
+                ticker,
                 Map.of(
                         Channel.LOG,
                         new RecordingSender(Channel.LOG, outcome),
@@ -526,6 +559,27 @@ class DispatchNotificationsServiceTest {
                 return last;
             }
             return instants.removeFirst();
+        }
+    }
+
+    private static final class FixedTicker implements Ticker {
+
+        private final Deque<Long> readings = new ArrayDeque<>();
+        private final long last;
+
+        FixedTicker(long... readings) {
+            for (long reading : readings) {
+                this.readings.add(reading);
+            }
+            this.last = readings[readings.length - 1];
+        }
+
+        @Override
+        public long nanos() {
+            if (readings.isEmpty()) {
+                return last;
+            }
+            return readings.removeFirst();
         }
     }
 }

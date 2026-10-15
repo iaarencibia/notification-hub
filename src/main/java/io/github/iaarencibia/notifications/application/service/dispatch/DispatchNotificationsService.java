@@ -7,6 +7,7 @@ import io.github.iaarencibia.notifications.application.port.out.DispatchEvents;
 import io.github.iaarencibia.notifications.application.port.out.NotificationChannelSender;
 import io.github.iaarencibia.notifications.application.port.out.NotificationDispatchQueue;
 import io.github.iaarencibia.notifications.application.port.out.SystemClock;
+import io.github.iaarencibia.notifications.application.port.out.Ticker;
 import io.github.iaarencibia.notifications.domain.Channel;
 import io.github.iaarencibia.notifications.domain.DispatchOutcome;
 import io.github.iaarencibia.notifications.domain.Notification;
@@ -31,6 +32,7 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
     private final DispatchEvents events;
     private final Executor deliveries;
     private final SystemClock clock;
+    private final Ticker ticker;
     private final Map<Channel, NotificationChannelSender> senders;
     private final RetryPolicy retryPolicy;
 
@@ -45,6 +47,7 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
             DispatchEvents events,
             Executor deliveries,
             SystemClock clock,
+            Ticker ticker,
             Map<Channel, NotificationChannelSender> senders,
             RetryPolicy retryPolicy) {
 
@@ -57,6 +60,7 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
         this.events = Objects.requireNonNull(events, "events must not be null");
         this.deliveries = Objects.requireNonNull(deliveries, "deliveries must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.ticker = Objects.requireNonNull(ticker, "ticker must not be null");
         this.senders = Map.copyOf(Objects.requireNonNull(senders, "senders must not be null"));
         this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy must not be null");
     }
@@ -82,11 +86,15 @@ public final class DispatchNotificationsService implements DispatchDueNotificati
         Notification notification = claimed.notification();
         try {
             Instant startedAt = clock.now();
+            // Timed on the ticker, not between the two instants: a step in the database host's
+            // wall clock would land inside the duration.
+            long startedTick = ticker.nanos();
             DispatchOutcome outcome = attemptDelivery(notification);
+            Duration took = Duration.ofNanos(ticker.nanos() - startedTick);
             Instant finishedAt = clock.now();
 
             NotificationAttempt attempt =
-                    notification.recordAttempt(outcome, startedAt, finishedAt, retryPolicy);
+                    notification.recordAttempt(outcome, startedAt, finishedAt, took, retryPolicy);
             queue.recordAttempt(new ClaimedNotification(notification, claimed.version()), attempt);
 
             events.dispatched(notification, attempt);

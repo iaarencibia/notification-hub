@@ -1,5 +1,6 @@
 package io.github.iaarencibia.notifications.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -207,14 +208,19 @@ public final class Notification {
             DispatchOutcome outcome,
             Instant startedAt,
             Instant finishedAt,
+            Duration duration,
             RetryPolicy retryPolicy) {
 
         Objects.requireNonNull(outcome, "outcome must not be null");
         Objects.requireNonNull(startedAt, "startedAt must not be null");
         Objects.requireNonNull(finishedAt, "finishedAt must not be null");
+        Objects.requireNonNull(duration, "duration must not be null");
         Objects.requireNonNull(retryPolicy, "retryPolicy must not be null");
         if (finishedAt.isBefore(startedAt)) {
             throw new IllegalArgumentException("finishedAt must not precede startedAt");
+        }
+        if (duration.isNegative()) {
+            throw new IllegalArgumentException("duration must not be negative");
         }
         if (status != NotificationStatus.DISPATCHING) {
             // A result for a row nobody owns means two instances dispatched it.
@@ -232,7 +238,8 @@ public final class Notification {
                         outcome.responseCode(),
                         outcome.errorMessage(),
                         startedAt,
-                        finishedAt);
+                        finishedAt,
+                        duration.toMillis());
 
         switch (outcome) {
             case DispatchOutcome.Success success -> markSent(finishedAt);

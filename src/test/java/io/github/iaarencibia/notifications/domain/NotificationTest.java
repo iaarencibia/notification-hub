@@ -54,6 +54,7 @@ class NotificationTest {
                 new DispatchOutcome.RetryableFailure(503, "Service Unavailable", null),
                 at,
                 at.plusMillis(50),
+                Duration.ofMillis(50),
                 POLICY);
     }
 
@@ -207,7 +208,12 @@ class NotificationTest {
         void cannotClaimTerminal() {
             Notification sent = submitted();
             sent.claim(T0, INSTANCE);
-            sent.recordAttempt(new DispatchOutcome.Success(200), T0, T0.plusMillis(40), POLICY);
+            sent.recordAttempt(
+                    new DispatchOutcome.Success(200),
+                    T0,
+                    T0.plusMillis(40),
+                    Duration.ofMillis(40),
+                    POLICY);
 
             assertThatThrownBy(() -> sent.claim(T0.plusSeconds(1), INSTANCE))
                     .isInstanceOf(InvalidStateTransitionException.class);
@@ -248,7 +254,11 @@ class NotificationTest {
             notification.claim(T0, INSTANCE);
 
             notification.recordAttempt(
-                    new DispatchOutcome.Success(200), T0, T0.plusMillis(39), POLICY);
+                    new DispatchOutcome.Success(200),
+                    T0,
+                    T0.plusMillis(39),
+                    Duration.ofMillis(39),
+                    POLICY);
 
             assertThat(notification.status()).isEqualTo(NotificationStatus.SENT);
             assertThat(notification.sentAt()).isEqualTo(T0.plusMillis(39));
@@ -263,7 +273,11 @@ class NotificationTest {
             notification.claim(T0, INSTANCE);
 
             notification.recordAttempt(
-                    new DispatchOutcome.Success(200), T0, T0.plusMillis(39), POLICY);
+                    new DispatchOutcome.Success(200),
+                    T0,
+                    T0.plusMillis(39),
+                    Duration.ofMillis(39),
+                    POLICY);
 
             assertThat(notification.claimedAt()).isNull();
             assertThat(notification.claimedBy()).isNull();
@@ -277,7 +291,11 @@ class NotificationTest {
 
             NotificationAttempt attempt =
                     notification.recordAttempt(
-                            new DispatchOutcome.Success(200), T0, T0.plusMillis(39), POLICY);
+                            new DispatchOutcome.Success(200),
+                            T0,
+                            T0.plusMillis(39),
+                            Duration.ofMillis(36),
+                            POLICY);
 
             assertThat(attempt.id()).isNotNull();
             assertThat(attempt.notificationId()).isEqualTo(ID);
@@ -288,7 +306,9 @@ class NotificationTest {
             assertThat(attempt.errorMessage()).isNull();
             assertThat(attempt.startedAt()).isEqualTo(T0);
             assertThat(attempt.finishedAt()).isEqualTo(T0.plusMillis(39));
-            assertThat(attempt.durationMs()).isEqualTo(39L);
+            assertThat(attempt.durationMs())
+                    .as("the measured duration, not the gap between the two instants")
+                    .isEqualTo(36L);
         }
     }
 
@@ -306,6 +326,7 @@ class NotificationTest {
                     new DispatchOutcome.PermanentFailure(400, "Bad Request"),
                     T0,
                     T0.plusMillis(12),
+                    Duration.ofMillis(12),
                     POLICY);
 
             assertThat(notification.status()).isEqualTo(NotificationStatus.FAILED);
@@ -324,6 +345,7 @@ class NotificationTest {
                     new DispatchOutcome.PermanentFailure(404, "Not Found"),
                     T0,
                     T0.plusMillis(12),
+                    Duration.ofMillis(12),
                     POLICY);
 
             assertThat(notification.claimedAt()).isNull();
@@ -377,6 +399,7 @@ class NotificationTest {
                             429, "Too Many Requests", Duration.ofSeconds(30)),
                     T0,
                     T0.plusMillis(50),
+                    Duration.ofMillis(50),
                     POLICY);
 
             assertThat(notification.nextAttemptAt()).isEqualTo(T0.plusMillis(50).plusSeconds(30));
@@ -411,7 +434,11 @@ class NotificationTest {
             Instant third = T0.plusSeconds(22);
             notification.claim(third, INSTANCE);
             notification.recordAttempt(
-                    new DispatchOutcome.Success(200), third, third.plusMillis(39), POLICY);
+                    new DispatchOutcome.Success(200),
+                    third,
+                    third.plusMillis(39),
+                    Duration.ofMillis(39),
+                    POLICY);
 
             assertThat(notification.status()).isEqualTo(NotificationStatus.SENT);
             assertThat(notification.attempts()).isEqualTo(3);
@@ -474,6 +501,7 @@ class NotificationTest {
                                             new DispatchOutcome.Success(200),
                                             T0,
                                             T0.plusMillis(39),
+                                            Duration.ofMillis(39),
                                             POLICY))
                     .isInstanceOf(InvalidStateTransitionException.class);
         }
@@ -484,7 +512,11 @@ class NotificationTest {
             Notification notification = submitted();
             notification.claim(T0, INSTANCE);
             notification.recordAttempt(
-                    new DispatchOutcome.Success(200), T0, T0.plusMillis(39), POLICY);
+                    new DispatchOutcome.Success(200),
+                    T0,
+                    T0.plusMillis(39),
+                    Duration.ofMillis(39),
+                    POLICY);
 
             assertThatThrownBy(
                             () ->
@@ -492,6 +524,7 @@ class NotificationTest {
                                             new DispatchOutcome.Success(200),
                                             T0,
                                             T0.plusMillis(39),
+                                            Duration.ofMillis(39),
                                             POLICY))
                     .isInstanceOf(InvalidStateTransitionException.class);
         }
@@ -509,18 +542,44 @@ class NotificationTest {
                                             new DispatchOutcome.Success(200),
                                             T0.plusMillis(39),
                                             T0,
+                                            Duration.ofMillis(39),
                                             POLICY));
         }
 
         @Test
-        @DisplayName("requires an outcome, timestamps and a retry policy")
+        @DisplayName("rejects a negative duration before spending an attempt")
+        void rejectsNegativeDuration() {
+            Notification notification = submitted();
+            notification.claim(T0, INSTANCE);
+
+            assertThatIllegalArgumentException()
+                    .isThrownBy(
+                            () ->
+                                    notification.recordAttempt(
+                                            new DispatchOutcome.Success(200),
+                                            T0,
+                                            T0.plusMillis(39),
+                                            Duration.ofMillis(-1),
+                                            POLICY));
+            assertThat(notification.attempts()).isZero();
+            assertThat(notification.status()).isEqualTo(NotificationStatus.DISPATCHING);
+        }
+
+        @Test
+        @DisplayName("requires an outcome, timestamps, a duration and a retry policy")
         void requiresMandatoryArguments() {
             Notification notification = submitted();
             notification.claim(T0, INSTANCE);
 
             assertThatNullPointerException()
                     .isThrownBy(
-                            () -> notification.recordAttempt(null, T0, T0.plusMillis(39), POLICY));
+                            () ->
+                                    notification.recordAttempt(
+                                            null,
+                                            T0,
+                                            T0.plusMillis(39),
+                                            Duration.ofMillis(39),
+                                            POLICY));
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->
@@ -528,12 +587,17 @@ class NotificationTest {
                                             new DispatchOutcome.Success(200),
                                             null,
                                             T0.plusMillis(39),
+                                            Duration.ofMillis(39),
                                             POLICY));
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->
                                     notification.recordAttempt(
-                                            new DispatchOutcome.Success(200), T0, null, POLICY));
+                                            new DispatchOutcome.Success(200),
+                                            T0,
+                                            null,
+                                            Duration.ofMillis(39),
+                                            POLICY));
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->
@@ -541,6 +605,16 @@ class NotificationTest {
                                             new DispatchOutcome.Success(200),
                                             T0,
                                             T0.plusMillis(39),
+                                            null,
+                                            POLICY));
+            assertThatNullPointerException()
+                    .isThrownBy(
+                            () ->
+                                    notification.recordAttempt(
+                                            new DispatchOutcome.Success(200),
+                                            T0,
+                                            T0.plusMillis(39),
+                                            Duration.ofMillis(39),
                                             null));
         }
     }

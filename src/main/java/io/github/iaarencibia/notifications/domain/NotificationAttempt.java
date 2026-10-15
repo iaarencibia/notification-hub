@@ -1,6 +1,5 @@
 package io.github.iaarencibia.notifications.domain;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -11,6 +10,8 @@ import java.util.UUID;
  *
  * @param errorMessage {@code null} when it succeeded, required on failure
  * @param finishedAt never before {@code startedAt}
+ * @param durationMs measured on a monotonic clock, so it need not match the gap between the two
+ *     instants, which a wall-clock step widens or shrinks
  */
 public record NotificationAttempt(
         UUID id,
@@ -21,7 +22,8 @@ public record NotificationAttempt(
         Integer responseCode,
         String errorMessage,
         Instant startedAt,
-        Instant finishedAt) {
+        Instant finishedAt,
+        long durationMs) {
 
     public NotificationAttempt {
         Objects.requireNonNull(id, "id must not be null");
@@ -37,18 +39,13 @@ public record NotificationAttempt(
         if (finishedAt.isBefore(startedAt)) {
             throw new IllegalArgumentException("finishedAt must not precede startedAt");
         }
+        if (durationMs < 0) {
+            throw new IllegalArgumentException("durationMs must not be negative");
+        }
         // Mirrors ck_attempt_failure_has_reason: the row outlives the object that created
         // it, and a reader asking why a notification failed has nothing else to go on.
         if (outcome != AttemptOutcome.SUCCESS && (errorMessage == null || errorMessage.isBlank())) {
             throw new IllegalArgumentException("a failed attempt must record why it failed");
         }
-    }
-
-    /**
-     * Derived rather than stored as a component, so it cannot disagree with the two instants it is
-     * measured from.
-     */
-    public long durationMs() {
-        return Duration.between(startedAt, finishedAt).toMillis();
     }
 }

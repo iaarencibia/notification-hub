@@ -158,7 +158,8 @@ class LoggingDispatchEventsTest {
                 200,
                 null,
                 start,
-                start.plusMillis(1500));
+                start.plusMillis(4500),
+                1500L);
     }
 
     private static Notification notification(NotificationStatus after) {

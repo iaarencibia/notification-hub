@@ -32,7 +32,8 @@ class NotificationAttemptTest {
                 503,
                 "Service Unavailable",
                 STARTED_AT,
-                STARTED_AT.plusMillis(48));
+                STARTED_AT.plusMillis(48),
+                48L);
     }
 
     @Nested
@@ -53,6 +54,7 @@ class NotificationAttemptTest {
             assertThat(attempt.errorMessage()).isEqualTo("Service Unavailable");
             assertThat(attempt.startedAt()).isEqualTo(STARTED_AT);
             assertThat(attempt.finishedAt()).isEqualTo(STARTED_AT.plusMillis(48));
+            assertThat(attempt.durationMs()).isEqualTo(48L);
         }
 
         @Test
@@ -69,7 +71,8 @@ class NotificationAttemptTest {
                             null,
                             null,
                             STARTED_AT,
-                            STARTED_AT.plusMillis(2));
+                            STARTED_AT.plusMillis(2),
+                            2L);
 
             assertThat(attempt.responseCode()).isNull();
             assertThat(attempt.errorMessage()).isNull();
@@ -90,7 +93,8 @@ class NotificationAttemptTest {
                                             503,
                                             null,
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
             assertThatIllegalArgumentException()
                     .isThrownBy(
                             () ->
@@ -103,7 +107,8 @@ class NotificationAttemptTest {
                                             400,
                                             "   ",
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
         }
 
         @Test
@@ -121,7 +126,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->
@@ -134,7 +140,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->
@@ -147,7 +154,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->
@@ -160,7 +168,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
         }
 
         @Test
@@ -178,7 +187,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             null,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
             assertThatNullPointerException()
                     .isThrownBy(
                             () ->
@@ -191,7 +201,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT,
-                                            null));
+                                            null,
+                                            0L));
         }
 
         @Test
@@ -209,7 +220,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
             assertThatIllegalArgumentException()
                     .isThrownBy(
                             () ->
@@ -222,7 +234,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT,
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
         }
 
         @Test
@@ -240,7 +253,8 @@ class NotificationAttemptTest {
                                             200,
                                             null,
                                             STARTED_AT.plusMillis(1),
-                                            STARTED_AT));
+                                            STARTED_AT,
+                                            0L));
         }
     }
 
@@ -249,34 +263,8 @@ class NotificationAttemptTest {
     class Duration {
 
         @Test
-        @DisplayName("is measured between the two instants, never stored")
-        void isDerived() {
-            assertThat(valid().durationMs()).isEqualTo(48L);
-        }
-
-        @Test
-        @DisplayName("is zero when an attempt finished in the same instant it started")
-        void allowsZero() {
-            // The LOG channel writes to stdout: a delivery can plausibly take less time than the
-            // clock resolves.
-            NotificationAttempt attempt =
-                    new NotificationAttempt(
-                            ATTEMPT_ID,
-                            NOTIFICATION_ID,
-                            1,
-                            Channel.LOG,
-                            AttemptOutcome.SUCCESS,
-                            null,
-                            null,
-                            STARTED_AT,
-                            STARTED_AT);
-
-            assertThat(attempt.durationMs()).isZero();
-        }
-
-        @Test
-        @DisplayName("covers a dispatch that ran into a timeout")
-        void coversLongAttempts() {
+        @DisplayName("is the measured value, even when the two instants are further apart")
+        void isTheMeasuredValue() {
             NotificationAttempt attempt =
                     new NotificationAttempt(
                             ATTEMPT_ID,
@@ -287,9 +275,50 @@ class NotificationAttemptTest {
                             null,
                             "Read timed out",
                             STARTED_AT,
-                            STARTED_AT.plusSeconds(5));
+                            STARTED_AT.plusSeconds(8),
+                            5_000L);
 
             assertThat(attempt.durationMs()).isEqualTo(5_000L);
+        }
+
+        @Test
+        @DisplayName("may be zero, for a delivery shorter than a millisecond")
+        void allowsZero() {
+            // The LOG channel writes to stdout: a delivery can plausibly take less than a
+            // millisecond.
+            NotificationAttempt attempt =
+                    new NotificationAttempt(
+                            ATTEMPT_ID,
+                            NOTIFICATION_ID,
+                            1,
+                            Channel.LOG,
+                            AttemptOutcome.SUCCESS,
+                            null,
+                            null,
+                            STARTED_AT,
+                            STARTED_AT,
+                            0L);
+
+            assertThat(attempt.durationMs()).isZero();
+        }
+
+        @Test
+        @DisplayName("is never negative")
+        void rejectsNegative() {
+            assertThatIllegalArgumentException()
+                    .isThrownBy(
+                            () ->
+                                    new NotificationAttempt(
+                                            ATTEMPT_ID,
+                                            NOTIFICATION_ID,
+                                            1,
+                                            Channel.SERVICE,
+                                            AttemptOutcome.SUCCESS,
+                                            200,
+                                            null,
+                                            STARTED_AT,
+                                            STARTED_AT,
+                                            -1L));
         }
     }
 }

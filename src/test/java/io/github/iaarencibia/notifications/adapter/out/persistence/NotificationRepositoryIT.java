@@ -299,6 +299,9 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
         assertThat(first.errorMessage()).isEqualTo("503 from the destination");
         assertThat(first.startedAt()).isEqualTo(Instant.parse("2026-09-01T10:01:00Z"));
         assertThat(first.finishedAt()).isEqualTo(Instant.parse("2026-09-01T10:01:05Z"));
+        assertThat(first.durationMs())
+                .as("read back as stored, not recomputed from the two instants")
+                .isEqualTo(4200L);
         assertThat(attempts.get(1).responseCode()).isNull();
         assertThat(attempts.get(2).errorMessage()).isNull();
     }
@@ -403,7 +406,7 @@ class NotificationRepositoryIT extends IntegrationTestSupport {
                 INSERT INTO notification_attempt (
                     id, notification_id, attempt_number, channel, outcome, response_code,
                     error_message, started_at, finished_at, duration_ms)
-                VALUES (?, ?, ?, 'SERVICE', ?, ?, ?, ?, ?, 5000)
+                VALUES (?, ?, ?, 'SERVICE', ?, ?, ?, ?, ?, 4200)
                 """,
                 UUID.randomUUID(),
                 notificationId,
