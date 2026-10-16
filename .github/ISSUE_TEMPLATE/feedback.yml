@@ -1,0 +1,18 @@
+name: Design feedback
+description: A comment on a decision, the code or the documentation.
+labels: [feedback]
+body:
+  - type: input
+    id: subject
+    attributes:
+      label: Subject
+      description: The decision, file or section it is about, for example ADR 0003 or the retry policy.
+    validations:
+      required: true
+  - type: textarea
+    id: comment
+    attributes:
+      label: Comment
+      description: What you would have done differently, and why.
+    validations:
+      required: true

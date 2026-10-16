@@ -1,0 +1,27 @@
+name: Proposal
+description: A change to the design or a new capability.
+labels: [proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What the current design does not handle, or handles badly.
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: What you would change
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve it, and why this one is better.
+  - type: textarea
+    id: cost
+    attributes:
+      label: What it costs
+      description: What gets harder, slower or more complex if the change is made.

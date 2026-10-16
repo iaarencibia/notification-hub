@@ -1,0 +1,42 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: The request you sent, the response or log line you got, or the state a notification ended in.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What the README, the API docs or an ADR led you to expect.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The steps from a fresh `docker compose up --build`, with any environment variable you changed.
+      placeholder: |
+        1. docker compose up --build
+        2. curl ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit
+      description: The commit you ran, from `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant lines from `docker compose logs app`. Remove any secret first.
+      render: text
