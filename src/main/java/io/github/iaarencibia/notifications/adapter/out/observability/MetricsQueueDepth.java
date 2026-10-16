@@ -8,7 +8,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.util.function.ToLongFunction;
 import org.springframework.stereotype.Component;
 
-/** Serves the last queue depth read, and NaN while there is none, so a scrape never queries. */
+/** Serves the last queue depth read as gauges, and NaN while there is none. */
 @Component
 final class MetricsQueueDepth implements QueueDepthEvents {
 

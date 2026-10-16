@@ -1,6 +1,6 @@
 package io.github.iaarencibia.notifications.application.port.out;
 
-/** Reading how much work is queued. A port of its own so the observer can change nothing. */
+/** Reads how much work is queued. */
 public interface QueueInspection {
 
     /**
