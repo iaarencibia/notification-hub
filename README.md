@@ -171,7 +171,8 @@ Testcontainers, and the format check. The same command runs on every pull reques
 
 ## Design decisions
 
-Each decision has a record with the options it was chosen over and what it costs.
+Each decision has a record with the options it considered, what it costs, and the improvements
+planned next.
 
 | Record | Decision |
 |---|---|
