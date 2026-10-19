@@ -40,7 +40,47 @@
       "description": "Intake requests answered with a refusal. One reason per thing the caller has to fix.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 9, "y": 1, "w": 9, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "reqps", "min": 0 }, "overrides": [] },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "min": 0, "softMax": 1 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "idempotency_key_reused" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#CC79A7" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "invalid_body" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#E69F00" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "invalid_header" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#56B4E9" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "not_acceptable" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#999999" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "unacceptable_recipient" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#D55E00" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "unauthenticated" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#F0E442" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "undeliverable_channel" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#009E73" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "unreadable_body" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0072B2" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "unsupported_media_type" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9467BD" } }]
+          }
+        ]
+      },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
@@ -217,7 +257,23 @@
       "description": "SUCCESS: 2xx. RETRYABLE_FAILURE: 5xx, 429, timeout or refused connection. PERMANENT_FAILURE: any other 4xx, a redirect, or a refused address. Outcome of the attempt, not of the notification.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 36, "w": 9, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "reqps", "min": 0 }, "overrides": [] },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "min": 0 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "SUCCESS" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "RETRYABLE_FAILURE" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "PERMANENT_FAILURE" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
@@ -234,7 +290,23 @@
       "description": "A timeout lasts as long as the read timeout, so retryable failures pile up near that value.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 9, "y": 36, "w": 9, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "s", "min": 0 }, "overrides": [] },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "min": 0 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "SUCCESS" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "RETRYABLE_FAILURE" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "PERMANENT_FAILURE" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
@@ -275,7 +347,19 @@
       "description": "A notification settles once: sent on a 2xx, failed on a permanent failure or when a retryable one runs out of attempts.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 45, "w": 9, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "reqps", "min": 0 }, "overrides": [] },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "min": 0 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "sent" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "failed" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
@@ -351,7 +435,7 @@
       "description": "Rows left DISPATCHING longer than the stale claim timeout, put back to PENDING by the reaper. Zero on a healthy system: anything here means an instance died mid-delivery, and those notifications may be delivered twice.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 62, "w": 9, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0, "min": 0 }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0, "min": 0, "softMax": 1 }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
@@ -368,7 +452,7 @@
       "description": "claim_lost: the attempt finished after its row was released and claimed again, so its result was discarded. unexpected: a failure outside the delivery itself, the row stays claimed until the reaper releases it.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 9, "y": 62, "w": 9, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "reqps", "min": 0 }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "reqps", "min": 0, "softMax": 1 }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
